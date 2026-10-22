@@ -27,6 +27,8 @@ final class SettingsModel {
     private(set) var launchAtLogin: Bool
     private(set) var isClearing = false
     var errorMessage: String?
+    /// 로그인 항목 승인이 필요한 상태. 안내와 "시스템 설정 열기" 버튼을 보여 준다.
+    private(set) var needsLoginApproval = false
 
     @ObservationIgnored private let settings: PasterSettings
     @ObservationIgnored private let store: ClipStore
@@ -46,7 +48,8 @@ final class SettingsModel {
     /// 창을 열 때마다 시스템 상태와 다시 맞춘다 (시스템 설정에서 바뀌었을 수 있다).
     func refresh() {
         retention = settings.retention
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        errorMessage = nil
+        syncLaunchAtLogin()
         reloadExcludedApps()
     }
 
@@ -65,11 +68,17 @@ final class SettingsModel {
             Log.app.error("로그인 시 실행 설정 실패: \(String(describing: error), privacy: .public)")
             errorMessage = "로그인 시 실행을 설정하지 못했습니다: \(error.localizedDescription)"
         }
-        let status = service.status
+        syncLaunchAtLogin()
+    }
+
+    func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
+    private func syncLaunchAtLogin() {
+        let status = SMAppService.mainApp.status
         launchAtLogin = status == .enabled
-        if enabled, status == .requiresApproval {
-            errorMessage = "시스템 설정 → 일반 → 로그인 항목에서 Paster를 허용해 주세요."
-        }
+        needsLoginApproval = status == .requiresApproval
     }
 
     // MARK: 제외 앱
@@ -82,9 +91,19 @@ final class SettingsModel {
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK else { return }
-        let ids = panel.urls.compactMap { Bundle(url: $0)?.bundleIdentifier }
-        if ids.count < panel.urls.count {
+        if let window = hostWindow, window.isVisible {
+            panel.beginSheetModal(for: window) { [weak self] response in
+                guard response == .OK else { return }
+                MainActor.assumeIsolated { self?.addExcludedApps(at: panel.urls) }
+            }
+        } else if panel.runModal() == .OK {
+            addExcludedApps(at: panel.urls)
+        }
+    }
+
+    private func addExcludedApps(at urls: [URL]) {
+        let ids = urls.compactMap { Bundle(url: $0)?.bundleIdentifier }
+        if ids.count < urls.count {
             errorMessage = "일부 앱의 번들 ID를 읽지 못해 추가하지 않았습니다."
         } else {
             errorMessage = nil
@@ -117,14 +136,17 @@ final class SettingsModel {
         alert.alertStyle = .warning
         alert.messageText = "고정하지 않은 항목을 모두 삭제할까요?"
         alert.informativeText = "Pinned 항목은 유지됩니다. 이 작업은 되돌릴 수 없습니다."
-        alert.addButton(withTitle: "삭제").hasDestructiveAction = true
+        // 첫 버튼이 Return 기본값이다. Return 으로 삭제되지 않도록 "취소" 를 먼저 둔다
         alert.addButton(withTitle: "취소")
+        let delete = alert.addButton(withTitle: "삭제")
+        delete.hasDestructiveAction = true
+        delete.keyEquivalent = ""
         if let window = hostWindow, window.isVisible {
             alert.beginSheetModal(for: window) { [weak self] response in
-                guard response == .alertFirstButtonReturn else { return }
+                guard response == .alertSecondButtonReturn else { return }
                 MainActor.assumeIsolated { self?.clearAllHistory() }
             }
-        } else if alert.runModal() == .alertFirstButtonReturn {
+        } else if alert.runModal() == .alertSecondButtonReturn {
             clearAllHistory()
         }
     }

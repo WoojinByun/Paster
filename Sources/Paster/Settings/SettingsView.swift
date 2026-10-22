@@ -51,6 +51,15 @@ struct SettingsView: View {
                     get: { model.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }
                 ))
+                if model.needsLoginApproval {
+                    HStack {
+                        Text("시스템 설정 → 일반 → 로그인 항목에서 Paster를 허용해 주세요.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("시스템 설정 열기") { model.openLoginItemsSettings() }
+                    }
+                }
                 extraGeneralRows
             }
 
