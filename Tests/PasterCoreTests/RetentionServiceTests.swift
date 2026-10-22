@@ -42,26 +42,19 @@ final class TickingClock: @unchecked Sendable {
     }
 }
 
-final class RetentionServiceTests {
+struct RetentionServiceTests {
     let store: ClipStore
     let clock = TestClock(Fixtures.now)
-    let suite: String
-    let defaults: UserDefaults
     let settings: PasterSettings
     let service: RetentionService
     let day: TimeInterval = 24 * 3600
 
     init() throws {
         store = try Fixtures.makeStore()
-        (suite, defaults) = Fixtures.makeDefaultsSuite(prefix: "RetentionServiceTests")
-        settings = PasterSettings(defaults: defaults)
+        settings = PasterSettings(store: InMemorySettingsStore())
         let calendar = Self.seoulCalendar
         let clock = clock
         service = RetentionService(store: store, calendar: calendar, now: { clock.now })
-    }
-
-    deinit {
-        Fixtures.removeDefaultsSuite(defaults, named: suite)
     }
 
     static var seoulCalendar: Calendar {

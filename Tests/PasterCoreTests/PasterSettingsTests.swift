@@ -2,18 +2,12 @@ import Foundation
 import Testing
 @testable import PasterCore
 
-final class PasterSettingsTests {
-    let suite: String
-    let defaults: UserDefaults
+struct PasterSettingsTests {
+    let store = InMemorySettingsStore()
     let settings: PasterSettings
 
     init() {
-        (suite, defaults) = Fixtures.makeDefaultsSuite(prefix: "PasterSettingsTests")
-        settings = PasterSettings(defaults: defaults)
-    }
-
-    deinit {
-        Fixtures.removeDefaultsSuite(defaults, named: suite)
+        settings = PasterSettings(store: store)
     }
 
     @Test func defaultsWhenEmpty() {
@@ -30,21 +24,21 @@ final class PasterSettingsTests {
     }
 
     @Test func retentionFallsBackToDefaultOnGarbageData() {
-        defaults.set(Data("not json".utf8), forKey: PasterSettings.Key.retention)
+        store.set(Data("not json".utf8), forKey: PasterSettings.Key.retention)
         #expect(settings.retention == .default)
     }
 
     @Test func retentionFallsBackToDefaultOnMissingKey() {
         // 타입이 하나 빠진 JSON (예: 이후 버전에서 kind 가 추가/제거된 경우)
         let json = #"{"text":{"isEnabled":false,"period":"24h"},"image":{"isEnabled":false,"period":"24h"}}"#
-        defaults.set(Data(json.utf8), forKey: PasterSettings.Key.retention)
+        store.set(Data(json.utf8), forKey: PasterSettings.Key.retention)
         #expect(settings.retention == .default)
     }
 
     @Test func retentionFallsBackToDefaultOnUnknownPeriod() {
         let entry = #"{"isEnabled":false,"period":"1y"}"#
         let json = #"{"text":\#(entry),"image":\#(entry),"files":\#(entry)}"#
-        defaults.set(Data(json.utf8), forKey: PasterSettings.Key.retention)
+        store.set(Data(json.utf8), forKey: PasterSettings.Key.retention)
         #expect(settings.retention == .default)
     }
 

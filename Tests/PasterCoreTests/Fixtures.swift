@@ -23,32 +23,6 @@ enum Fixtures {
         return output as Data
     }
 
-    private static var preferencesDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences", isDirectory: true)
-    }
-
-    /// 테스트용 UserDefaults 스위트를 만든다. 첫 호출 때 이전 실행이 남긴 plist 도 치운다.
-    static func makeDefaultsSuite(prefix: String) -> (name: String, defaults: UserDefaults) {
-        _ = sweepStaleSuites
-        let name = "\(prefix)-\(UUID().uuidString)"
-        return (name, UserDefaults(suiteName: name)!)
-    }
-
-    /// 스위트의 도메인과 plist 파일을 지운다.
-    /// cfprefsd 가 프로세스 종료 뒤에 파일을 다시 쓰는 경우가 있어서, 남은 것은 다음 실행의 sweepStaleSuites 가 치운다.
-    static func removeDefaultsSuite(_ defaults: UserDefaults, named suite: String) {
-        defaults.removePersistentDomain(forName: suite)
-        try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent("\(suite).plist"))
-    }
-
-    private static let sweepStaleSuites: Void = {
-        let pattern = #/^(RetentionServiceTests|PasterSettingsTests)-[0-9A-Fa-f-]+\.plist$/#
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: preferencesDirectory.path)) ?? []
-        for name in names where name.wholeMatch(of: pattern) != nil {
-            try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent(name))
-        }
-    }()
-
     static func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("PasterTests-\(UUID().uuidString)", isDirectory: true)
