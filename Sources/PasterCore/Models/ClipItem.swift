@@ -115,6 +115,8 @@ extension ClipItem {
     }
 
     /// 앞부분에서 처음으로 비어 있지 않은 줄. CRLF 도 한 줄바꿈으로 본다.
+    /// 패널 목록 행은 `plainText` 를 앞 `ClipStore.listTextLimit` 글자만 들고 있으므로,
+    /// 첫 번째 비어 있지 않은 줄이 그보다 뒤에서 시작하면 패널에는 `blankTitle`("(공백)") 이 보인다.
     static func textTitle(_ text: String) -> String {
         let head = String(String.UnicodeScalarView(text.unicodeScalars.prefix(titleScanLimit)))
         for line in head.split(whereSeparator: \.isNewline) {

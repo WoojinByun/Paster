@@ -37,7 +37,14 @@ extension ClipStore {
 
     /// 손상본과 blob 디렉터리를 같은 접미사로 옮기고 본 파일의 새 이름을 돌려준다.
     /// 같은 이름이 이미 있으면 `-1`, `-2` ... 를 붙여 덮어쓰지 않는다. 빈 blob 디렉터리는 열 때 다시 만든다.
-    private static func quarantine(_ url: URL, blobDirectory: URL, now: Date) throws -> String {
+    /// `blobs/` 를 먼저 옮긴다. DB 만 옮겨지고 blob 이 남으면 다음 실행의 고아 blob 정리가 격리본의 이미지를 지우기 때문이다.
+    /// DB 파일을 옮기다 실패하면 `blobs/` 를 되돌려 놓고 (최선) 오류를 던진다.
+    static func quarantine(
+        _ url: URL,
+        blobDirectory: URL,
+        now: Date,
+        move: (_ source: String, _ destination: String) throws -> Void = { try FileManager.default.moveItem(atPath: $0, toPath: $1) }
+    ) throws -> String {
         let base = ".corrupt-\(Int(now.timeIntervalSince1970))"
         let extras = ["", "-wal", "-shm", "-journal"]
         let fileManager = FileManager.default
@@ -52,13 +59,20 @@ extension ClipStore {
             attempt += 1
             suffix = "\(base)-\(attempt)"
         }
-        for extra in extras {
-            let source = URL(fileURLWithPath: url.path + extra)
-            guard fileManager.fileExists(atPath: source.path) else { continue }
-            try fileManager.moveItem(at: source, to: URL(fileURLWithPath: url.path + suffix + extra))
-        }
+        var blobsMoved = false
         if fileManager.fileExists(atPath: blobPath) {
-            try fileManager.moveItem(atPath: blobPath, toPath: blobPath + suffix)
+            try move(blobPath, blobPath + suffix)
+            blobsMoved = true
+        }
+        do {
+            for extra in extras {
+                let source = url.path + extra
+                guard fileManager.fileExists(atPath: source) else { continue }
+                try move(source, url.path + suffix + extra)
+            }
+        } catch {
+            if blobsMoved { try? move(blobPath + suffix, blobPath) }
+            throw error
         }
         return url.lastPathComponent + suffix
     }

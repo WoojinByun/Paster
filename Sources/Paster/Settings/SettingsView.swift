@@ -61,6 +61,12 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("자동으로 업데이트 확인", isOn: $model.automaticallyChecksForUpdates)
+                    .disabled(!model.hasUpdateFeed)
+                if !model.hasUpdateFeed {
+                    Text("개발용 빌드: 업데이트 피드가 없습니다")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("데이터") {

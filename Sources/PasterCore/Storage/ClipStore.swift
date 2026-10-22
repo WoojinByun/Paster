@@ -16,6 +16,12 @@ public final class ClipStore: Sendable {
         // DatabaseQueue 는 연결이 하나라 여기서 한 번 켜면 계속 유지된다.
         try dbQueue.writeWithoutTransaction { try $0.execute(sql: "PRAGMA secure_delete = ON") }
         try Self.migrator.migrate(dbQueue)
+        // FTS 인덱스에서도 지운 항목의 흔적을 남기지 않는다. 설정은 clip_fts_config 에 영구 저장되고 다시 켜도 무해하다.
+        // 마이그레이션이 아니라 열 때마다 하는 이유: 3.44 미만에서 처음 실행했다면 OS 업데이트 뒤에야 켤 수 있다.
+        try dbQueue.write { db in
+            guard try Self.supportsFTSSecureDelete(db) else { return }
+            try db.execute(sql: "INSERT INTO clip_fts(clip_fts, rank) VALUES('secure-delete', 1)")
+        }
     }
 
     /// FTS5 `secure-delete` 옵션은 SQLite 3.44 부터 있다.
@@ -81,11 +87,8 @@ public final class ClipStore: Sendable {
                 END;
                 """)
         }
-        migrator.registerMigration("v2-fts-secure-delete") { db in
-            // FTS 인덱스에서도 지운 항목의 흔적을 남기지 않는다. 설정은 clip_fts_config 에 영구 저장된다.
-            guard try supportsFTSSecureDelete(db) else { return }
-            try db.execute(sql: "INSERT INTO clip_fts(clip_fts, rank) VALUES('secure-delete', 1)")
-        }
+        // FTS secure-delete 는 init 에서 열 때마다 켠다. 이미 이 마이그레이션을 기록한 DB 가 있어 이름만 남긴다.
+        migrator.registerMigration("v2-fts-secure-delete") { _ in }
         return migrator
     }
 }

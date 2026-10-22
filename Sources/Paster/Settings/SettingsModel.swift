@@ -31,6 +31,8 @@ final class SettingsModel {
             updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
         }
     }
+    /// 업데이트 피드가 있는 빌드인지. 없으면 (개발용 빌드) 자동 확인 토글을 끈다.
+    var hasUpdateFeed: Bool { updater.hasFeed }
     private(set) var isClearing = false
     var errorMessage: String?
     /// 로그인 항목 승인이 필요한 상태. 안내와 "시스템 설정 열기" 버튼을 보여 준다.

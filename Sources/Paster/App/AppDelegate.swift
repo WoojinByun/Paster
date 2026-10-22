@@ -24,6 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 info: "다른 Paster가 실행 중이라 이 Paster는 종료합니다. 메뉴 막대의 Paster 아이콘을 확인하세요."
             )
             return
+        } catch InstanceLock.Failure.unavailable(let error) {
+            Log.app.fault("잠금 파일을 만들 수 없음: \(String(describing: error), privacy: .private)")
+            showFatalAlert(
+                message: "Paster를 시작할 수 없습니다",
+                info: "잠금 파일을 만들 수 없습니다. \(error.localizedDescription)"
+            )
+            return
         } catch {
             // 오류 설명에 홈 경로가 들어갈 수 있어 private 로 남긴다
             Log.app.fault("저장소를 열 수 없음: \(String(describing: error), privacy: .private)")

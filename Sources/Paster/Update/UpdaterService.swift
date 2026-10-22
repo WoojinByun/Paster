@@ -15,11 +15,15 @@ final class UpdaterService: NSObject {
     private var menuItems: [NSMenuItem] = []
     private var canCheckObservation: NSKeyValueObservation?
 
+    /// Info.plist 에 `SUFeedURL` 이 있는지. 개발용(debug) 빌드에는 없어 업데이트를 받지 않는다.
+    let hasFeed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") != nil
+
     override init() {
         super.init()
         controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
         // 기본값 ON. 한 번도 정한 적 없으면 켜 두어 Sparkle 의 허락 요청 창을 생략한다.
-        if UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil {
+        // 피드가 없는 개발용 빌드에서는 켜지 않는다 (켜 봐야 확인할 곳이 없다).
+        if hasFeed, UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil {
             controller.updater.automaticallyChecksForUpdates = true
         }
         canCheckObservation = controller.updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] _, change in
