@@ -16,15 +16,23 @@ public struct BlobStore: Sendable {
         return name
     }
 
+    /// 디렉터리 밖으로 나가지 않는 평범한 `.png` 파일 이름만 허용한다.
+    static func isPlainName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && name.hasSuffix(".png")
+    }
+
+    /// 잘못된 이름은 디렉터리 안의 존재하지 않는 자리 표시 경로로 바꾼다.
     public func url(for name: String) -> URL {
-        directory.appendingPathComponent(name, isDirectory: false)
+        directory.appendingPathComponent(Self.isPlainName(name) ? name : ".invalid", isDirectory: false)
     }
 
     public func read(_ name: String) -> Data? {
-        try? Data(contentsOf: url(for: name))
+        guard Self.isPlainName(name) else { return nil }
+        return try? Data(contentsOf: url(for: name))
     }
 
     public func remove(_ name: String) {
+        guard Self.isPlainName(name) else { return }
         try? FileManager.default.removeItem(at: url(for: name))
     }
 

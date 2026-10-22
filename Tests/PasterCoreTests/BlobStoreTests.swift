@@ -23,4 +23,30 @@ struct BlobStoreTests {
         let name = try store.write(Data([0]))
         #expect(store.allNames() == [name])
     }
+
+    @Test func removeIgnoresNamesOutsideDirectory() throws {
+        let parent = try Fixtures.temporaryDirectory()
+        let store = try BlobStore(directory: parent.appendingPathComponent("blobs"))
+        let outside = parent.appendingPathComponent("x.png")
+        try Data([7]).write(to: outside)
+
+        store.remove("../x.png")
+        #expect(FileManager.default.fileExists(atPath: outside.path))
+        #expect(store.read("../x.png") == nil)
+    }
+
+    @Test func rejectsNonPlainNames() throws {
+        let parent = try Fixtures.temporaryDirectory()
+        let store = try BlobStore(directory: parent.appendingPathComponent("blobs"))
+        try Data([7]).write(to: parent.appendingPathComponent("paster.sqlite"))
+        let valid = try store.write(Data([1]))
+
+        for name in ["../paster.sqlite", "a/b.png", "/etc/passwd", ".", "..", "", "x.txt", "x.png/"] {
+            #expect(store.read(name) == nil, "\(name)")
+            store.remove(name)
+            #expect(store.url(for: name).deletingLastPathComponent().standardizedFileURL == store.directory.standardizedFileURL, "\(name)")
+        }
+        #expect(FileManager.default.fileExists(atPath: parent.appendingPathComponent("paster.sqlite").path))
+        #expect(store.read(valid) == Data([1]))
+    }
 }
