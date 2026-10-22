@@ -12,7 +12,18 @@ public final class ClipStore: Sendable {
     public init(dbQueue: DatabaseQueue, blobs: BlobStore) throws {
         self.dbQueue = dbQueue
         self.blobs = blobs
+        // 지운 내용을 0 으로 덮어써 파일에 남지 않게 한다. 연결 단위 설정이라 열 때마다 켠다.
+        // DatabaseQueue 는 연결이 하나라 여기서 한 번 켜면 계속 유지된다.
+        try dbQueue.writeWithoutTransaction { try $0.execute(sql: "PRAGMA secure_delete = ON") }
         try Self.migrator.migrate(dbQueue)
+    }
+
+    /// FTS5 `secure-delete` 옵션은 SQLite 3.44 부터 있다.
+    static func supportsFTSSecureDelete(_ db: Database) throws -> Bool {
+        let version = try String.fetchOne(db, sql: "SELECT sqlite_version()") ?? ""
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        guard parts.count >= 2 else { return false }
+        return (parts[0], parts[1]) >= (3, 44)
     }
 
     /// 테스트용 메모리 DB.
@@ -69,6 +80,11 @@ public final class ClipStore: Sendable {
                     VALUES (new.id, new.plain_text, new.source_app_name);
                 END;
                 """)
+        }
+        migrator.registerMigration("v2-fts-secure-delete") { db in
+            // FTS 인덱스에서도 지운 항목의 흔적을 남기지 않는다. 설정은 clip_fts_config 에 영구 저장된다.
+            guard try supportsFTSSecureDelete(db) else { return }
+            try db.execute(sql: "INSERT INTO clip_fts(clip_fts, rank) VALUES('secure-delete', 1)")
         }
         return migrator
     }
