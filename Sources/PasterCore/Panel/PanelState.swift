@@ -101,6 +101,17 @@ public struct PanelState: Equatable, Sendable {
         }
     }
 
+    /// 다시 읽은 목록에서 이전 선택 항목의 새 위치로 선택을 옮긴다. `updateCounts` 다음에 호출한다.
+    /// nil 이거나 범위를 벗어난 위치는 무시하고 기존(범위로 맞춘) 선택을 둔다.
+    public mutating func reselect(clipboardIndex: Int?, pinnedIndex: Int?) {
+        if let clipboardIndex, clipboardIndex >= 0, clipboardIndex < clipboardCount {
+            self.clipboardIndex = clipboardIndex
+        }
+        if let pinnedIndex, pinnedIndex >= 0, pinnedIndex < pinnedCount {
+            self.pinnedIndex = pinnedIndex
+        }
+    }
+
     /// 검색어가 바뀌면 결과가 달라지므로 두 칼럼의 선택을 맨 위로 되돌린다.
     public mutating func setQuery(_ newQuery: String) {
         guard newQuery != query else { return }

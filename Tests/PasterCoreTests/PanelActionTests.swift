@@ -91,6 +91,13 @@ struct PanelActionTests {
         #expect(effect(bottom, .optCmdDown) == nil)
     }
 
+    @Test func optCmdArrowsDoNothingWhileSearching() {
+        var filtered = pinned
+        filtered.query = "abc"
+        #expect(PanelReducer.reduce(filtered, .optCmdUp) == (filtered, nil))
+        #expect(PanelReducer.reduce(filtered, .optCmdDown) == (filtered, nil))
+    }
+
     @Test func optCmdArrowsOnlyWorkInPinned() {
         #expect(effect(clipboard, .optCmdUp) == nil)
         #expect(effect(search, .optCmdDown) == nil)

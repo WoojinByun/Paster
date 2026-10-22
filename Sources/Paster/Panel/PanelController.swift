@@ -177,7 +177,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             case let .movePinned(index, direction):
                 guard let id = model.item(.pinned, index)?.id else { return }
                 try store.movePinned(id: id, direction: direction)
-                model.reload()
+                // 리듀서가 이미 옮긴 자리로 선택을 옮겨 두었으므로 id 로 다시 찾지 않는다
+                model.reload(keepingSelection: false)
             case let .delete(column, index):
                 guard let id = model.item(column, index)?.id else { return }
                 try store.delete(id: id)

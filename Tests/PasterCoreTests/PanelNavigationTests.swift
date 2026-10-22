@@ -122,6 +122,31 @@ struct PanelNavigationTests {
         #expect(state.clipboardIndex == 0)
     }
 
+    @Test func reselectMovesSelectionToTheSameItemsNewPosition() {
+        var state = PanelState(focus: .clipboard, clipboardCount: 3, pinnedCount: 3, clipboardIndex: 1, pinnedIndex: 2)
+        // 새 항목이 맨 위에 들어와 선택했던 항목이 한 칸 내려갔다
+        state.updateCounts(clipboard: 4, pinned: 3)
+        state.reselect(clipboardIndex: 2, pinnedIndex: 0)
+        #expect(state.clipboardIndex == 2)
+        #expect(state.pinnedIndex == 0)
+        #expect(state.focus == .clipboard)
+    }
+
+    @Test func reselectWithoutMatchKeepsClampedSelection() {
+        var state = PanelState(focus: .clipboard, clipboardCount: 5, pinnedCount: 2, clipboardIndex: 4, pinnedIndex: 1)
+        state.updateCounts(clipboard: 3, pinned: 2)
+        state.reselect(clipboardIndex: nil, pinnedIndex: nil)
+        #expect(state.clipboardIndex == 2)
+        #expect(state.pinnedIndex == 1)
+    }
+
+    @Test func reselectIgnoresOutOfRangeIndices() {
+        var state = PanelState(focus: .clipboard, clipboardCount: 3, pinnedCount: 1, clipboardIndex: 1, pinnedIndex: 0)
+        state.reselect(clipboardIndex: 3, pinnedIndex: -1)
+        #expect(state.clipboardIndex == 1)
+        #expect(state.pinnedIndex == 0)
+    }
+
     @Test func setQueryResetsSelections() {
         var state = PanelState(focus: .search, clipboardCount: 5, pinnedCount: 3, clipboardIndex: 4, pinnedIndex: 2)
         state.setQuery("abc")

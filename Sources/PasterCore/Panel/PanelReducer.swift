@@ -90,11 +90,12 @@ public enum PanelReducer {
             guard index < count else { return (state, nil) }
             return (state, .togglePin(column, index: index))
         case .optCmdUp:
-            guard column == .pinned, index > 0, index < count else { return (state, nil) }
+            // 검색 중에는 걸러진 목록과 실제 순서가 달라 엉뚱한 이웃과 바뀌므로 막는다
+            guard column == .pinned, state.query.isEmpty, index > 0, index < count else { return (state, nil) }
             state.setIndex(index - 1, in: column)
             return (state, .movePinned(index: index, direction: .up))
         case .optCmdDown:
-            guard column == .pinned, index + 1 < count else { return (state, nil) }
+            guard column == .pinned, state.query.isEmpty, index + 1 < count else { return (state, nil) }
             state.setIndex(index + 1, in: column)
             return (state, .movePinned(index: index, direction: .down))
         case .cmdDelete:

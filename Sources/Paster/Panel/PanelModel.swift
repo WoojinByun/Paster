@@ -35,6 +35,8 @@ final class PanelModel {
     @ObservationIgnored weak var searchField: NSTextField?
     /// 리듀서가 낸 effect 를 처리할 곳 (PanelController).
     @ObservationIgnored var effectHandler: ((PanelEffect) -> Void)?
+    /// 마지막으로 목록을 읽은 검색어. 검색어가 바뀐 뒤에는 이전 선택 항목을 따라가지 않는다
+    @ObservationIgnored private var loadedQuery: String?
 
     init(store: ClipStore, settings: PasterSettings) {
         self.store = store
@@ -46,11 +48,15 @@ final class PanelModel {
         state = PanelState()
         message = nil
         syncSearchField()
-        reload()
+        reload(keepingSelection: false)
     }
 
-    /// 두 목록을 다시 읽고 선택 위치를 범위 안으로 맞춘다.
-    func reload() {
+    /// 두 목록을 다시 읽는다. `keepingSelection` 이면 칼럼마다 선택했던 항목을 id 로 찾아 그 위치를 계속 선택하고,
+    /// 사라졌으면 선택 위치를 범위 안으로 맞춘다. 새 복사가 맨 위에 들어와도 선택이 다른 항목으로 밀리지 않는다.
+    func reload(keepingSelection: Bool = true) {
+        let keep = keepingSelection && loadedQuery == state.query
+        let selectedClipboardID = keep ? item(.clipboard, state.clipboardIndex)?.id : nil
+        let selectedPinnedID = keep ? item(.pinned, state.pinnedIndex)?.id : nil
         do {
             clipboardItems = try store.fetchUnpinned(matching: state.query, settings: settings.retention, now: Date())
             pinnedItems = try store.fetchPinned(matching: state.query)
@@ -60,14 +66,19 @@ final class PanelModel {
         } catch {
             Log.app.error("목록 읽기 실패: \(String(describing: error), privacy: .public)")
         }
+        loadedQuery = state.query
         state.updateCounts(clipboard: clipboardItems.count, pinned: pinnedItems.count)
+        state.reselect(
+            clipboardIndex: selectedClipboardID.flatMap { id in clipboardItems.firstIndex { $0.id == id } },
+            pinnedIndex: selectedPinnedID.flatMap { id in pinnedItems.firstIndex { $0.id == id } }
+        )
     }
 
     func queryChanged(_ query: String) {
         guard query != state.query else { return }
         state.setQuery(query)
         message = nil
-        reload()
+        reload(keepingSelection: false)
     }
 
     /// 키 · 클릭을 리듀서에 넣고 effect 를 넘긴다. 반환값은 키 이벤트를 흘려보낼지 판단하는 데 쓴다.
@@ -80,7 +91,7 @@ final class PanelModel {
             // Esc 로 검색어를 지운 경우 등: 검색창이 상태를 따라가게 한다
             syncSearchField()
             message = nil
-            reload()
+            reload(keepingSelection: false)
         }
         if let effect, effect != .passThrough { effectHandler?(effect) }
         return effect
