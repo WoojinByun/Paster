@@ -33,9 +33,16 @@ final class SettingsWindowController {
 /// 메인 메뉴가 없어 ⌘W 가 동작하지 않으므로 직접 처리한다.
 private final class SettingsWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        // 한글 입력 소스에서도 동작하도록 keyCode 13(W) 도 본다
-        let isW = event.charactersIgnoringModifiers?.lowercased() == "w" || event.keyCode == 13
+        // capsLock 등은 무시하고 ⌘ 계열 4개 수정자만 비교한다
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        // 글자(ASCII)로 먼저 판별해 Dvorak 등 배열을 따른다.
+        // 한글 등 ASCII 가 아닌 입력 소스일 때만 keyCode 13(W) 으로 판별한다 (PanelController 의 편집 단축키와 같은 규칙)
+        let isW: Bool
+        if let characters = event.charactersIgnoringModifiers, !characters.isEmpty, characters.allSatisfy(\.isASCII) {
+            isW = characters.lowercased() == "w"
+        } else {
+            isW = event.keyCode == 13
+        }
         if flags == .command, isW {
             performClose(nil)
             return true

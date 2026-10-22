@@ -34,7 +34,8 @@ finish() {
 if security find-certificate -c "$NAME" "$KEYCHAIN" >/dev/null 2>&1; then
     echo "인증서 '$NAME' 는 이미 가져왔지만 신뢰되지 않았습니다. 신뢰 설정을 다시 적용합니다."
     security find-certificate -c "$NAME" -p "$KEYCHAIN" > "$WORK/cert.pem"
-    trust_cert
+    # 암호 창 취소 등으로 실패해도 set -e 로 죽지 않고 finish 의 안내 문구로 간다
+    trust_cert || true
     finish
 fi
 
@@ -67,5 +68,5 @@ P12_PASSWORD="$(uuidgen)"
 
 security import "$WORK/cert.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
 
-trust_cert
+trust_cert || true
 finish
