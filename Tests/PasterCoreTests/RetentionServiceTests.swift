@@ -18,20 +18,57 @@ final class TestClock: @unchecked Sendable {
     }
 }
 
-struct RetentionServiceTests {
+/// 읽을 때마다 정해진 만큼 흐르고, 읽은 시각을 모두 기록하는 시계.
+final class TickingClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+    private let step: TimeInterval
+    private var reads: [Date] = []
+
+    init(start: Date, step: TimeInterval) {
+        current = start
+        self.step = step
+    }
+
+    var readTimes: [Date] { lock.withLock { reads } }
+
+    func read() -> Date {
+        lock.withLock {
+            let value = current
+            reads.append(value)
+            current = current.addingTimeInterval(step)
+            return value
+        }
+    }
+}
+
+final class RetentionServiceTests {
     let store: ClipStore
     let clock = TestClock(Fixtures.now)
+    let suite: String
+    let defaults: UserDefaults
     let settings: PasterSettings
     let service: RetentionService
     let day: TimeInterval = 24 * 3600
 
     init() throws {
         store = try Fixtures.makeStore()
-        settings = PasterSettings(defaults: UserDefaults(suiteName: "RetentionServiceTests-\(UUID().uuidString)")!)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        suite = "RetentionServiceTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suite)!
+        settings = PasterSettings(defaults: defaults)
+        let calendar = Self.seoulCalendar
         let clock = clock
         service = RetentionService(store: store, calendar: calendar, now: { clock.now })
+    }
+
+    deinit {
+        defaults.removePersistentDomain(forName: suite)
+    }
+
+    static var seoulCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
+        return calendar
     }
 
     @Test func purgeDeletesExpiredPerKindAndKeepsPinned() throws {
@@ -81,5 +118,27 @@ struct RetentionServiceTests {
         clock.advance(by: 7 * 3600) // 2027-01-16 00:00 KST
         #expect(try service.purgeIfDayChanged(using: settings) != nil)
         #expect(settings.lastPurgeDay == "2027-01-16")
+    }
+
+    @Test func purgeReadsTheClockOnceSoCutoffAndDayKeyAgree() throws {
+        // 2027-01-15 23:59:59 KST. 시계를 두 번 읽으면 두 번째는 다음 날이 된다
+        let start = try #require(ISO8601DateFormatter().date(from: "2027-01-15T14:59:59Z"))
+        let ticking = TickingClock(start: start, step: 1)
+        let service = RetentionService(store: store, calendar: Self.seoulCalendar, now: { ticking.read() })
+
+        try service.purge(using: settings)
+
+        #expect(ticking.readTimes.count == 1)
+        #expect(settings.lastPurgeDay == "2027-01-15")
+    }
+
+    @Test func purgeIfDayChangedReadsTheClockOnce() throws {
+        let start = try #require(ISO8601DateFormatter().date(from: "2027-01-15T14:59:59Z"))
+        let ticking = TickingClock(start: start, step: 1)
+        let service = RetentionService(store: store, calendar: Self.seoulCalendar, now: { ticking.read() })
+
+        #expect(try service.purgeIfDayChanged(using: settings) != nil)
+        #expect(ticking.readTimes.count == 1)
+        #expect(settings.lastPurgeDay == "2027-01-15")
     }
 }
