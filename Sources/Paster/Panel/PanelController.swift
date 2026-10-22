@@ -85,8 +85,15 @@ final class PanelController: NSObject, NSWindowDelegate {
         let modifiers = KeyModifiers(event.modifierFlags)
         // 메인 메뉴가 없는 앱이라 ⌘C/⌘V 등 편집 단축키를 직접 보낸다
         if modifiers == .command, let action = Self.editAction(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers) {
-            // 목록 포커스면 먼저 검색창으로 돌아간다
-            if model.state.focus != .search { model.send(.textInput) }
+            if model.state.focus != .search {
+                // 목록 포커스의 ⌘C 는 선택 항목 복사 (⌘Enter 와 같은 경로)
+                if action == #selector(NSText.copy(_:)) {
+                    model.send(.cmdEnter)
+                    return nil
+                }
+                // 그 밖의 편집 단축키는 먼저 검색창으로 돌아간다
+                model.send(.textInput)
+            }
             focusSearchField()
             NSApp.sendAction(action, to: nil, from: nil)
             return nil
