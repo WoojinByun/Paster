@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Paster app icon: a filing box (3/4 view) holding three documents. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F8F8F8"/>
+      <stop offset="1" stop-color="#EFEFEF"/>
+    </linearGradient>
+    <filter id="shadowBlur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <!-- Soft drop shadow under the tile -->
+  <rect id="shadow" x="100" y="112" width="824" height="824" rx="185" fill="#000000" opacity="0.32" filter="url(#shadowBlur)"/>
+
+  <!-- Background tile (macOS icon grid: 824x824 at 100,100) -->
+  <rect id="tile" x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+
+  <!-- Artwork, scaled up slightly and centered on the tile -->
+  <g id="artwork" transform="translate(512 510) scale(1.06) translate(-495 -520)">
+
+  <!-- Every shape gets a white outline so overlapping edges show a ~17px gap -->
+  <g stroke="#FFFFFF" stroke-width="16" stroke-linejoin="round">
+
+    <!-- Documents, back to front. Each: sheet with clipped corner + folded flap. -->
+    <g id="doc-back">
+      <path fill="#356FAD" d="M 380 220 L 600 220 L 660 280 L 660 560 L 380 560 Z"/>
+      <path fill="#1B3A5E" d="M 600 220 L 600 280 L 660 280 Z"/>
+    </g>
+    <g id="doc-middle">
+      <path fill="#356FAD" d="M 320 290 L 540 290 L 600 350 L 600 620 L 320 620 Z"/>
+      <path fill="#1B3A5E" d="M 540 290 L 540 350 L 600 350 Z"/>
+    </g>
+    <g id="doc-front">
+      <path fill="#356FAD" d="M 260 360 L 480 360 L 540 420 L 540 680 L 260 680 Z"/>
+      <path fill="#1B3A5E" d="M 480 360 L 480 420 L 540 420 Z"/>
+    </g>
+
+    <!-- Box, right side face (oblique, going up and back) -->
+    <path id="box-side" fill="#1D3B5E" d="M 600 520 L 790 400 L 790 700 L 600 820 Z"/>
+
+    <!-- Box, front face -->
+    <rect id="box-front" x="200" y="520" width="400" height="300" fill="#22446A"/>
+  </g>
+
+  <!-- Side handle hole, drawn in the side face's skewed plane -->
+  <g transform="matrix(1 -0.6316 0 1 600 520)">
+    <rect x="45" y="104" width="100" height="62" rx="28" fill="#2B5585" stroke="#FFFFFF" stroke-width="15"/>
+  </g>
+
+  <!-- Front handle: open shallow trapezoid -->
+  <path id="handle" d="M 320 640 L 344 696 L 456 696 L 480 640" fill="none" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
