@@ -7,8 +7,6 @@ final class InstanceLock {
     enum Failure: Error {
         /// 다른 Paster 가 잠금을 잡고 있다
         case alreadyRunning
-        /// 잠금 파일을 열거나 잠글 수 없다 (errno)
-        case system(Int32)
     }
 
     static let fileName = "paster.lock"
@@ -18,14 +16,22 @@ final class InstanceLock {
     init(directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let path = directory.appendingPathComponent(Self.fileName).path
-        let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
-        guard fd >= 0 else { throw Failure.system(errno) }
+        var fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        // 쓰기 권한 없는 잠금 파일이 남아 있어도 flock 은 읽기 전용 fd 로 된다
+        if fd < 0, errno == EACCES {
+            fd = open(path, O_RDONLY | O_CLOEXEC)
+        }
+        guard fd >= 0 else { throw Self.posixError(errno) }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             let code = errno
             close(fd)
-            throw code == EWOULDBLOCK ? Failure.alreadyRunning : Failure.system(code)
+            throw code == EWOULDBLOCK ? Failure.alreadyRunning : Self.posixError(code)
         }
         self.fd = fd
+    }
+
+    private static func posixError(_ code: Int32) -> POSIXError {
+        POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
     }
 
     deinit {

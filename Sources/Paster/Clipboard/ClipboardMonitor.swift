@@ -13,9 +13,9 @@ final class ClipboardMonitor {
     private var timer: Timer?
     /// 저장을 순서대로 처리하기 위한 마지막 작업
     private var pending: Task<Void, Never>?
-    /// 마지막으로 처리한 폴링 이후 한 번이라도 앞에 있었던 앱들 (그때 앞에 있던 앱 포함).
-    /// 복사 후 폴링 전에 다른 앱으로 넘어가도 제외 앱의 복사를 놓치지 않기 위해 쓴다
-    private var recentBundleIDs: Set<String> = []
+    /// 직전 폴링 이후 앞에 있었던 앱들. 복사 후 폴링 전에 다른 앱으로 넘어가도
+    /// 제외 앱의 복사를 놓치지 않기 위해 쓴다
+    private var recentApps = RecentAppsWindow(frontmost: nil)
     private var activationObserver: NSObjectProtocol?
 
     var onSaved: (() -> Void)?
@@ -37,7 +37,7 @@ final class ClipboardMonitor {
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             let bundleID = app?.bundleIdentifier
             MainActor.assumeIsolated {
-                if let bundleID { self?.recentBundleIDs.insert(bundleID) }
+                self?.recentApps.activated(bundleID)
             }
         }
         let timer = Timer(timeInterval: Self.interval, repeats: true) { [weak self] _ in
@@ -59,25 +59,25 @@ final class ClipboardMonitor {
     }
 
     private func resetRecentApps() {
-        recentBundleIDs = []
-        if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
-            recentBundleIDs.insert(bundleID)
-        }
+        recentApps.reset(frontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
 
     private func poll() {
         let changeCount = pasteboard.changeCount
-        guard changeCount != lastChangeCount else { return }
+        guard changeCount != lastChangeCount else {
+            // 이번 구간엔 복사가 없었다. 다음 구간은 지금 앞의 앱부터 센다
+            resetRecentApps()
+            return
+        }
 
         let now = Date()
         let frontmost = NSWorkspace.shared.frontmostApplication
         var source = SourceApp(bundleID: frontmost?.bundleIdentifier, name: frontmost?.localizedName)
         let capture = settings.makeCapture()
-        // 복사한 앱을 알 수 없으니, 지난 폴링 이후 앞에 있었던 앱 중 하나라도 제외 앱이면 제외한다.
-        // 내용은 읽지 않고, 출처를 그 제외 앱으로 두어 ClipCapture 가 excludedApp 을 돌려주게 한다
-        var candidates = recentBundleIDs
-        if let bundleID = source.bundleID { candidates.insert(bundleID) }
-        let excludedID = candidates.sorted().first(where: capture.excludedBundleIDs.contains)
+        // 복사한 앱을 알 수 없으니, 직전 폴링 이후 앞에 있었던 앱 중 하나라도 제외 앱이면 제외한다.
+        // 내용은 읽지 않고, 출처를 그 제외 앱으로 두어 ClipCapture 가 excludedApp 을 돌려주게 한다.
+        // 읽기를 버리는 경우엔 구간을 비우지 않아 제외 쪽으로 기운다
+        let excludedID = recentApps.excludedApp(frontmost: source.bundleID, excluded: capture.excludedBundleIDs)
         if let excludedID, excludedID != source.bundleID {
             source = SourceApp(bundleID: excludedID, name: nil)
         }
