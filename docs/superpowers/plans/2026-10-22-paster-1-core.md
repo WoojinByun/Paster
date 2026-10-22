@@ -32,7 +32,7 @@ Expected: `Apple Swift version 6.4 ...` 와 `3.54.0 ...` (SQLite 3.34 이상이�
 
 - **GRDB 7.11.1** 의 `Package.swift` 는 `SQLITE_ENABLE_FTS5` 를 정의하므로 시스템 SQLite 로도 GRDB 의 FTS5 Swift API 가 켜진다. 다만 `trigram` 토크나이저용 Swift 헬퍼는 없으므로 이 계획은 **raw SQL** 로 `CREATE VIRTUAL TABLE ... USING fts5(..., content='clip_items', content_rowid='id', tokenize='trigram')` 와 동기화 트리거를 만든다. 시스템 SQLite 3.54.0 에서 한글 3글자 부분 문자열 검색이 동작함을 확인했다.
 - **Swift Testing** 은 `swift test` 로 바로 돈다. 출력 마지막 줄 형식: `✔ Test run with N tests in M suites passed after ...`. 매개변수화 테스트(`@Test(arguments:)`)는 1개로 센다. `swift test --filter <SuiteName>` 도 동작한다.
-- `UserDefaults` 는 이 SDK 에서 `Sendable` 이 아니다. 그래서 `PasterSettings` 는 `@unchecked Sendable` 로 둔다.
+- 설정 저장소는 `SettingsStore` 프로토콜(`AnyObject, Sendable`)로 추상화하고 `UserDefaults` 가 그대로 따른다. 테스트는 메모리 저장소를 써서 `~/Library/Preferences` 에 plist 를 남기지 않는다 (cfprefsd 가 프로세스 종료 뒤에 파일을 다시 쓰기 때문).
 - `URL(fileURLWithPath:).lastPathComponent` 는 한글을 NFD(자모 분해)로 돌려줄 수 있다. NFD 로 저장하면 NFC 검색어와 trigram 이 맞지 않으므로, 파일명은 저장 전에 `precomposedStringWithCanonicalMapping` 으로 NFC 로 맞춘다 (테스트로 확인). 검색은 저장된 텍스트가 NFC 든 NFD 든 찾을 수 있도록 검색어의 NFC · NFD 두 형태를 모두 매칭한다 (Task 8).
 - `Calendar.nextDate(after:matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime)` 은 0시가 없는 날(2018-11-04 상파울루)에 그날 01:00 을 돌려준다.
 
@@ -2497,9 +2497,35 @@ git commit -m "feat(core): open on-disk store and recover from corrupt database"
 
 **Files:**
 - Create: `Sources/PasterCore/Settings/PasterSettings.swift`
+- Test: `Tests/PasterCoreTests/InMemorySettingsStore.swift`
 - Test: `Tests/PasterCoreTests/PasterSettingsTests.swift`
 
 - [ ] **Step 1: 실패하는 테스트 작성**
+
+`Tests/PasterCoreTests/InMemorySettingsStore.swift`:
+
+```swift
+import Foundation
+@testable import PasterCore
+
+/// 테스트용 메모리 저장소. 실제 환경설정 파일을 건드리지 않는다.
+final class InMemorySettingsStore: SettingsStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Any] = [:]
+
+    func data(forKey key: String) -> Data? { value(forKey: key) as? Data }
+    func stringArray(forKey key: String) -> [String]? { value(forKey: key) as? [String] }
+    func string(forKey key: String) -> String? { value(forKey: key) as? String }
+
+    func set(_ value: Any?, forKey key: String) {
+        lock.withLock { values[key] = value }
+    }
+
+    private func value(forKey key: String) -> Any? {
+        lock.withLock { values[key] }
+    }
+}
+```
 
 `Tests/PasterCoreTests/PasterSettingsTests.swift`:
 
@@ -2509,11 +2535,11 @@ import Testing
 @testable import PasterCore
 
 struct PasterSettingsTests {
+    let store = InMemorySettingsStore()
     let settings: PasterSettings
 
     init() {
-        let suite = "PasterSettingsTests-\(UUID().uuidString)"
-        settings = PasterSettings(defaults: UserDefaults(suiteName: suite)!)
+        settings = PasterSettings(store: store)
     }
 
     @Test func defaultsWhenEmpty() {
@@ -2563,43 +2589,52 @@ Expected: 빌드 실패 `error: cannot find 'PasterSettings' in scope`
 ```swift
 import Foundation
 
-/// UserDefaults 에 저장하는 설정.
-/// UserDefaults 는 문서상 스레드 안전하지만 Sendable 로 표시돼 있지 않아 @unchecked 로 둔다.
-public struct PasterSettings: @unchecked Sendable {
+/// 설정이 쓰는 키-값 저장소. 앱은 UserDefaults, 테스트는 메모리 저장소를 쓴다.
+public protocol SettingsStore: AnyObject, Sendable {
+    func data(forKey key: String) -> Data?
+    func stringArray(forKey key: String) -> [String]?
+    func string(forKey key: String) -> String?
+    func set(_ value: Any?, forKey key: String)
+}
+
+extension UserDefaults: SettingsStore {}
+
+/// 저장소(기본값은 UserDefaults)에 저장하는 설정.
+public struct PasterSettings: Sendable {
     public enum Key {
         public static let retention = "retention"
         public static let excludedBundleIDs = "excludedBundleIDs"
         public static let lastPurgeDay = "lastPurgeDay"
     }
 
-    public let defaults: UserDefaults
+    private let store: any SettingsStore
 
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    public init(store: any SettingsStore = UserDefaults.standard) {
+        self.store = store
     }
 
     public var retention: RetentionSettings {
         get {
-            guard let data = defaults.data(forKey: Key.retention),
+            guard let data = store.data(forKey: Key.retention),
                   let settings = try? JSONDecoder().decode(RetentionSettings.self, from: data)
             else { return .default }
             return settings
         }
         nonmutating set {
-            defaults.set(try? JSONEncoder().encode(newValue), forKey: Key.retention)
+            store.set(try? JSONEncoder().encode(newValue), forKey: Key.retention)
         }
     }
 
     /// 캡처하지 않을 앱의 bundle id. 정렬해서 저장한다.
     public var excludedBundleIDs: [String] {
-        get { defaults.stringArray(forKey: Key.excludedBundleIDs) ?? [] }
-        nonmutating set { defaults.set(Array(Set(newValue)).sorted(), forKey: Key.excludedBundleIDs) }
+        get { store.stringArray(forKey: Key.excludedBundleIDs) ?? [] }
+        nonmutating set { store.set(Array(Set(newValue)).sorted(), forKey: Key.excludedBundleIDs) }
     }
 
     /// 마지막으로 정리한 로컬 날짜 (`yyyy-MM-dd`).
     public var lastPurgeDay: String? {
-        get { defaults.string(forKey: Key.lastPurgeDay) }
-        nonmutating set { defaults.set(newValue, forKey: Key.lastPurgeDay) }
+        get { store.string(forKey: Key.lastPurgeDay) }
+        nonmutating set { store.set(newValue, forKey: Key.lastPurgeDay) }
     }
 
     /// 현재 설정으로 만든 캡처 규칙.
@@ -2609,6 +2644,8 @@ public struct PasterSettings: @unchecked Sendable {
 }
 ```
 
+> 리뷰 반영: 저장소 주입(SettingsStore), 테스트는 메모리 저장소 사용
+
 - [ ] **Step 4: 통과 확인**
 
 Run: `swift test`
@@ -2617,7 +2654,7 @@ Expected: `✔ Test run with 67 tests in 12 suites passed`
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add Sources/PasterCore/Settings/PasterSettings.swift Tests/PasterCoreTests/PasterSettingsTests.swift
+git add Sources/PasterCore/Settings/PasterSettings.swift Tests/PasterCoreTests/InMemorySettingsStore.swift Tests/PasterCoreTests/PasterSettingsTests.swift
 git commit -m "feat(core): add UserDefaults-backed settings" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
@@ -2720,7 +2757,7 @@ struct RetentionServiceTests {
 
     init() throws {
         store = try Fixtures.makeStore()
-        settings = PasterSettings(defaults: UserDefaults(suiteName: "RetentionServiceTests-\(UUID().uuidString)")!)
+        settings = PasterSettings(store: InMemorySettingsStore())
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Seoul")!
         let clock = clock
