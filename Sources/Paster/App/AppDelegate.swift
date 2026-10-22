@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scheduler: RetentionScheduler?
     private var panelController: PanelController?
     private var settingsWindow: SettingsWindowController?
+    private let updater = UpdaterService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
@@ -41,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduler.start()
         self.scheduler = scheduler
 
-        settingsWindow = SettingsWindowController(environment: environment) { [weak panelController] in
+        settingsWindow = SettingsWindowController(environment: environment, updater: updater) { [weak panelController] in
             panelController?.reloadIfVisible()
         }
 
@@ -77,20 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(settings)
 
         menu.addItem(.separator())
-        menu.addItem(makeUpdateMenuItem())
+        menu.addItem(updater.makeMenuItem())
 
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quit.target = NSApp
         menu.addItem(quit)
         return menu
-    }
-
-    /// Sparkle 연결 전까지는 비활성 항목이다 (플랜 3 에서 연결).
-    private func makeUpdateMenuItem() -> NSMenuItem {
-        let item = NSMenuItem(title: "업데이트 확인…", action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
     }
 
     static var versionTitle: String {

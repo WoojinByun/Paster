@@ -25,6 +25,9 @@ final class SettingsModel {
     }
     private(set) var excludedApps: [ExcludedApp] = []
     private(set) var launchAtLogin: Bool
+    var automaticallyChecksForUpdates: Bool {
+        didSet { updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates }
+    }
     private(set) var isClearing = false
     var errorMessage: String?
     /// 로그인 항목 승인이 필요한 상태. 안내와 "시스템 설정 열기" 버튼을 보여 준다.
@@ -33,15 +36,18 @@ final class SettingsModel {
     @ObservationIgnored private let settings: PasterSettings
     @ObservationIgnored private let store: ClipStore
     @ObservationIgnored private let onDataChanged: () -> Void
+    @ObservationIgnored private let updater: UpdaterService
     /// 확인 대화상자를 시트로 붙일 설정 창.
     @ObservationIgnored weak var hostWindow: NSWindow?
 
-    init(environment: AppEnvironment, onDataChanged: @escaping () -> Void) {
+    init(environment: AppEnvironment, updater: UpdaterService, onDataChanged: @escaping () -> Void) {
         settings = environment.settings
         store = environment.store
+        self.updater = updater
         self.onDataChanged = onDataChanged
         retention = environment.settings.retention
         launchAtLogin = SMAppService.mainApp.status == .enabled
+        automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
         reloadExcludedApps()
     }
 

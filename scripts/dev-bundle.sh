@@ -9,7 +9,7 @@ BIN_DIR="$(swift build --show-bin-path)"
 APP="build/debug/Paster.app"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN_DIR/Paster" "$APP/Contents/MacOS/Paster"
 # SwiftPM 리소스 번들 (KeyboardShortcuts 지역화 문자열 등). Bundle.module 이 Contents/Resources 에서 찾는다.
 for bundle in "$BIN_DIR"/*.bundle; do
@@ -17,6 +17,8 @@ for bundle in "$BIN_DIR"/*.bundle; do
 done
 # 앱 아이콘 (Resources/AppIcon.icns 는 scripts/make-icon.sh 로 만들어 커밋해 둔다)
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# Sparkle.framework (실행 파일 rpath @executable_path/../Frameworks). 심볼릭 링크 유지를 위해 ditto
+ditto "$BIN_DIR/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,5 +39,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# 안쪽부터 ad-hoc 서명: Sparkle XPC 서비스 · 도우미 → 프레임워크 → 앱
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+codesign --force --sign - "$SPARKLE/XPCServices/Installer.xpc"
+codesign --force --sign - --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
+codesign --force --sign - "$SPARKLE/Autoupdate"
+codesign --force --sign - "$SPARKLE/Updater.app"
+codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 echo "$APP"

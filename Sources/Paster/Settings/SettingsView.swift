@@ -60,7 +60,7 @@ struct SettingsView: View {
                         Button("시스템 설정 열기") { model.openLoginItemsSettings() }
                     }
                 }
-                extraGeneralRows
+                Toggle("자동으로 업데이트 확인", isOn: $model.automaticallyChecksForUpdates)
             }
 
             Section("데이터") {
@@ -77,12 +77,6 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480)
-    }
-
-    /// 플랜 3 에서 "자동으로 업데이트 확인" 체크박스를 여기에 넣는다.
-    @ViewBuilder
-    private var extraGeneralRows: some View {
-        EmptyView()
     }
 
     private func retentionRow(_ title: String, kind: ClipKind) -> some View {

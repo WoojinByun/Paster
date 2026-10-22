@@ -6,8 +6,8 @@ final class SettingsWindowController {
     private let model: SettingsModel
     private var window: NSWindow?
 
-    init(environment: AppEnvironment, onDataChanged: @escaping () -> Void) {
-        model = SettingsModel(environment: environment, onDataChanged: onDataChanged)
+    init(environment: AppEnvironment, updater: UpdaterService, onDataChanged: @escaping () -> Void) {
+        model = SettingsModel(environment: environment, updater: updater, onDataChanged: onDataChanged)
     }
 
     func show() {
