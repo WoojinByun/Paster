@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: ClipboardMonitor?
     private var scheduler: RetentionScheduler?
     private var panelController: PanelController?
+    private var settingsWindow: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
@@ -39,6 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scheduler.onPurged = { [weak panelController] in panelController?.reloadIfVisible() }
         scheduler.start()
         self.scheduler = scheduler
+
+        settingsWindow = SettingsWindowController(environment: environment) { [weak panelController] in
+            panelController?.reloadIfVisible()
+        }
 
         HotkeyService.register { [weak panelController] in panelController?.toggle() }
         AccessibilityPermission.requestOnFirstLaunch()
@@ -99,8 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController?.show()
     }
 
-    /// 설정 창은 Task 6 에서 연결한다.
     @objc private func openSettings() {
-        Log.app.info("설정 선택")
+        settingsWindow?.show()
     }
 }
