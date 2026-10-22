@@ -26,7 +26,10 @@ final class SettingsModel {
     private(set) var excludedApps: [ExcludedApp] = []
     private(set) var launchAtLogin: Bool
     var automaticallyChecksForUpdates: Bool {
-        didSet { updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates }
+        didSet {
+            guard automaticallyChecksForUpdates != oldValue else { return }
+            updater.automaticallyChecksForUpdates = automaticallyChecksForUpdates
+        }
     }
     private(set) var isClearing = false
     var errorMessage: String?
@@ -55,6 +58,7 @@ final class SettingsModel {
     func refresh() {
         retention = settings.retention
         errorMessage = nil
+        automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
         syncLaunchAtLogin()
         reloadExcludedApps()
     }

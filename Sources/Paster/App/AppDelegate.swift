@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: PanelController?
     private var settingsWindow: SettingsWindowController?
     private let updater = UpdaterService()
+    private var updateMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
@@ -49,15 +50,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyService.register { [weak panelController] in panelController?.toggle() }
         AccessibilityPermission.requestOnFirstLaunch()
         statusItem = makeStatusItem()
+        updater.onUpdateAvailable = { [weak self] in self?.setUpdatePending(true) }
+        updater.onUpdateAttended = { [weak self] in self?.setUpdatePending(false) }
     }
 
     // MARK: 메뉴바
 
     private func makeStatusItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "list.clipboard", accessibilityDescription: "Paster")
+        item.button?.image = Self.statusImage
         item.menu = makeMenu()
         return item
+    }
+
+    private static let statusImage = NSImage(systemSymbolName: "list.clipboard", accessibilityDescription: "Paster")
+
+    /// 예약 확인에서 찾은 업데이트를 메뉴바 아이콘의 점과 메뉴 제목으로 알린다.
+    private func setUpdatePending(_ pending: Bool) {
+        let base = Self.statusImage
+        statusItem?.button?.image = pending ? base.map(Self.badged) : base
+        updateMenuItem?.title = pending ? UpdaterService.pendingTitle : UpdaterService.checkTitle
+    }
+
+    /// 오른쪽 위에 점을 찍은 템플릿 이미지.
+    private static func badged(_ base: NSImage) -> NSImage {
+        let image = NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            let diameter = rect.width * 0.4
+            let dot = NSRect(x: rect.maxX - diameter, y: rect.maxY - diameter, width: diameter, height: diameter)
+            // 아이콘과 겹치는 부분을 비워 점이 구분되게 한다
+            NSGraphicsContext.current?.compositingOperation = .clear
+            NSBezierPath(ovalIn: dot.insetBy(dx: -1.5, dy: -1.5)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Paster — 업데이트 설치 가능"
+        return image
     }
 
     private func makeMenu() -> NSMenu {
@@ -78,7 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(settings)
 
         menu.addItem(.separator())
-        menu.addItem(updater.makeMenuItem())
+        let update = updater.makeMenuItem()
+        updateMenuItem = update
+        menu.addItem(update)
 
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
