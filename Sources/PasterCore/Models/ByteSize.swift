@@ -7,7 +7,9 @@ public enum ByteSize {
         guard bytes >= 1000 else { return "\(bytes) B" }
         var value = Double(bytes)
         var unit = "B"
-        for next in units where value >= 1000 {
+        for next in units {
+            // 소수 첫째 자리로 반올림했을 때 1000 이 되면 다음 단위로 올린다
+            guard (value * 10).rounded() / 10 >= 1000 else { break }
             value /= 1000
             unit = next
         }

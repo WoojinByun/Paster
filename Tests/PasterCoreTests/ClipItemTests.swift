@@ -35,6 +35,7 @@ struct ClipItemTests {
 
     @Test(arguments: [
         (0, "0 B"), (999, "999 B"), (1000, "1.0 KB"), (1_234_567, "1.2 MB"), (5_000_000_000, "5.0 GB"),
+        (999_949, "999.9 KB"), (999_950, "1.0 MB"), (999_999, "1.0 MB"), (999_999_999, "1.0 GB"),
     ])
     func byteSizeFormat(bytes: Int, expected: String) {
         #expect(ByteSize.format(bytes) == expected)
