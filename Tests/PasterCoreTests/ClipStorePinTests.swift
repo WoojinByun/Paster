@@ -76,4 +76,25 @@ struct ClipStorePinTests {
         let id = try Fixtures.save(Fixtures.textClip("x"), in: store)
         #expect(try store.movePinned(id: id, direction: .up) == false)
     }
+
+    @Test func rePinningAfterUnpinLandsLastAndKeepsOrderStable() throws {
+        let ids = try ["a", "b", "c"].map { try Fixtures.save(Fixtures.textClip($0), in: store) }
+        let (a, b, c) = (ids[0], ids[1], ids[2])
+        for id in ids { try store.pin(id: id, now: Fixtures.now) }
+
+        try store.unpin(id: b, now: Fixtures.now.addingTimeInterval(10))
+        #expect(try pinnedTexts() == ["a", "c"])
+
+        try store.pin(id: b, now: Fixtures.now.addingTimeInterval(20))
+        #expect(try pinnedTexts() == ["a", "c", "b"])
+        #expect(try pinnedTexts() == ["a", "c", "b"])
+        let orders = try store.fetchPinned().compactMap(\.pinOrder)
+        #expect(orders.count == 3 && orders == orders.sorted() && Set(orders).count == 3)
+
+        #expect(try store.movePinned(id: b, direction: .up))
+        #expect(try pinnedTexts() == ["a", "b", "c"])
+        #expect(try store.movePinned(id: a, direction: .down))
+        #expect(try pinnedTexts() == ["b", "a", "c"])
+        #expect(try store.fetchPinned().map(\.id) == [b, a, c])
+    }
 }
