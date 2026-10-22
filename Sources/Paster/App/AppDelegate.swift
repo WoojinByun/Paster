@@ -9,23 +9,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scheduler: RetentionScheduler?
     private var panelController: PanelController?
     private var settingsWindow: SettingsWindowController?
-    private let updater = UpdaterService()
+    /// 단일 인스턴스 잠금을 얻은 뒤에 만든다 (두 번째 인스턴스가 Sparkle 을 시작하지 않도록)
+    private lazy var updater = UpdaterService()
     private var updateMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
         do {
             environment = try AppEnvironment()
+        } catch InstanceLock.Failure.alreadyRunning {
+            Log.app.error("다른 Paster 가 실행 중이라 종료")
+            showFatalAlert(
+                message: "Paster가 이미 실행 중입니다",
+                info: "다른 Paster가 실행 중이라 이 Paster는 종료합니다. 메뉴 막대의 Paster 아이콘을 확인하세요."
+            )
+            return
         } catch {
-            Log.app.fault("저장소를 열 수 없음: \(String(describing: error), privacy: .public)")
-            // 다른 인스턴스가 DB 를 잡고 있는 경우 등. 크래시 대신 알리고 종료한다
-            let alert = NSAlert()
-            alert.messageText = "Paster를 시작할 수 없습니다"
-            alert.informativeText = "데이터베이스를 열 수 없습니다. Paster가 이미 실행 중인지 확인해 주세요."
-            // .accessory 앱이라 활성화하지 않으면 알림이 다른 창 뒤에 숨을 수 있다
-            NSApp.activate()
-            alert.runModal()
-            NSApp.terminate(nil)
+            // 오류 설명에 홈 경로가 들어갈 수 있어 private 로 남긴다
+            Log.app.fault("저장소를 열 수 없음: \(String(describing: error), privacy: .private)")
+            showFatalAlert(
+                message: "Paster를 시작할 수 없습니다",
+                info: "데이터베이스를 열 수 없습니다. \(error.localizedDescription)"
+            )
             return
         }
         self.environment = environment
@@ -52,6 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = makeStatusItem()
         updater.onUpdateAvailable = { [weak self] in self?.setUpdatePending(true) }
         updater.onUpdateAttended = { [weak self] in self?.setUpdatePending(false) }
+    }
+
+    /// 크래시 대신 알리고 종료한다.
+    private func showFatalAlert(message: String, info: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = info
+        // .accessory 앱이라 활성화하지 않으면 알림이 다른 창 뒤에 숨을 수 있다
+        NSApp.activate()
+        alert.runModal()
+        NSApp.terminate(nil)
     }
 
     // MARK: 메뉴바
