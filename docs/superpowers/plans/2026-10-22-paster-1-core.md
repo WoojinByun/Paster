@@ -330,7 +330,9 @@ public enum ByteSize {
         guard bytes >= 1000 else { return "\(bytes) B" }
         var value = Double(bytes)
         var unit = "B"
-        for next in units where value >= 1000 {
+        for next in units {
+            // 소수 첫째 자리로 반올림했을 때 1000 이 되면 다음 단위로 올린다
+            guard (value * 10).rounded() / 10 >= 1000 else { break }
             value /= 1000
             unit = next
         }
@@ -338,6 +340,8 @@ public enum ByteSize {
     }
 }
 ```
+
+> 리뷰 반영: 반올림한 값이 1000 에 닿으면 다음 단위로 올린다 (`999_999` → `1.0 MB`, 커밋 14d9a86).
 
 `Sources/PasterCore/Models/ClipItem.swift` — Codable 의 CodingKeys 가 DB 칼럼 이름(snake_case)이다. GRDB 는 `[String]` 같은 중첩 Codable 값을 JSON 텍스트로 저장한다 (`file_paths`).
 
@@ -1295,15 +1299,23 @@ public struct BlobStore: Sendable {
         return name
     }
 
+    /// 디렉터리 밖으로 나가지 않는 평범한 `.png` 파일 이름만 허용한다.
+    static func isPlainName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && name.hasSuffix(".png")
+    }
+
+    /// 잘못된 이름은 디렉터리 안의 존재하지 않는 자리 표시 경로로 바꾼다.
     public func url(for name: String) -> URL {
-        directory.appendingPathComponent(name, isDirectory: false)
+        directory.appendingPathComponent(Self.isPlainName(name) ? name : ".invalid", isDirectory: false)
     }
 
     public func read(_ name: String) -> Data? {
-        try? Data(contentsOf: url(for: name))
+        guard Self.isPlainName(name) else { return nil }
+        return try? Data(contentsOf: url(for: name))
     }
 
     public func remove(_ name: String) {
+        guard Self.isPlainName(name) else { return }
         try? FileManager.default.removeItem(at: url(for: name))
     }
 
@@ -1314,6 +1326,8 @@ public struct BlobStore: Sendable {
     }
 }
 ```
+
+> 리뷰 반영: BlobStore 이름 검증(isPlainName), 커밋 3c5d944
 
 - [ ] **Step 4: 통과 확인**
 
@@ -1886,12 +1900,16 @@ struct SearchFilter: Equatable {
         case like(patterns: [String])
     }
 
+    /// 아주 긴 검색어가 SQLite 바인딩 변수 한도를 넘지 않도록 단어 수를 제한한다.
+    static let maxTerms = 32
+
     let terms: [Term]
 
     init(query: String) {
         terms = query
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
+            .prefix(Self.maxTerms)
             .map(Self.term(for:))
     }
 
@@ -1938,6 +1956,8 @@ struct SearchFilter: Equatable {
     }
 }
 ```
+
+> 리뷰 반영: 검색어 단어는 앞의 32개까지만 쓴다 (SQLite 바인딩 변수 한도 방어, 커밋 d28a1cf).
 
 - [ ] **Step 5: 조회 작성**
 
@@ -2179,6 +2199,8 @@ git commit -m "feat(core): add pin, unpin and pinned reordering" -m "Co-Authored
 
 스펙 7.1절: 만료 조건 `pinned_at IS NULL AND last_copied_at < now - 기간`, 만료 시 행 + blob 삭제, 고아 blob 정리, Clear All History 는 미고정 항목과 그 blob 만. 8.4절 ⌘⌫.
 
+> 리뷰 반영: BlobStore 이름 검증(isPlainName), 커밋 3c5d944 (코드는 Task 6 의 BlobStore 블록 참고)
+
 **Files:**
 - Create: `Sources/PasterCore/Storage/ClipStore+Delete.swift`
 - Test: `Tests/PasterCoreTests/ClipStoreDeleteTests.swift`
@@ -2408,10 +2430,18 @@ extension ClipStore {
         let databaseURL = directory.appendingPathComponent(databaseFileName)
         do {
             return try openChecked(at: databaseURL, blobs: blobs)
-        } catch {
-            Log.store.error("DB 열기 실패, 손상본을 보존하고 새로 만듦: \(String(describing: error), privacy: .public)")
-            try quarantine(databaseURL, now: now)
+        } catch let error as DatabaseError where isCorruption(error) {
+            // BUSY · 권한 등 손상이 아닌 오류는 정상 DB 를 건드리지 않도록 그대로 던진다.
+            let name = try quarantine(databaseURL, now: now)
+            Log.store.error("DB 손상(result code \(error.resultCode.rawValue, privacy: .public)), \(name, privacy: .public) 로 보존하고 새로 만듦")
             return try openChecked(at: databaseURL, blobs: blobs)
+        }
+    }
+
+    private static func isCorruption(_ error: DatabaseError) -> Bool {
+        switch error.resultCode.primaryResultCode {
+        case .SQLITE_NOTADB, .SQLITE_CORRUPT: true
+        default: false
         }
     }
 
@@ -2424,19 +2454,28 @@ extension ClipStore {
         return try ClipStore(dbQueue: dbQueue, blobs: blobs)
     }
 
-    private static func quarantine(_ url: URL, now: Date) throws {
-        let suffix = ".corrupt-\(Int(now.timeIntervalSince1970))"
+    /// 손상본을 옮기고 본 파일의 새 이름을 돌려준다. 같은 이름이 이미 있으면 `-1`, `-2` ... 를 붙여 덮어쓰지 않는다.
+    private static func quarantine(_ url: URL, now: Date) throws -> String {
+        let base = ".corrupt-\(Int(now.timeIntervalSince1970))"
+        let extras = ["", "-wal", "-shm", "-journal"]
         let fileManager = FileManager.default
-        for extra in ["", "-wal", "-shm", "-journal"] {
+        var suffix = base
+        var attempt = 0
+        while extras.contains(where: { fileManager.fileExists(atPath: url.path + suffix + $0) }) {
+            attempt += 1
+            suffix = "\(base)-\(attempt)"
+        }
+        for extra in extras {
             let source = URL(fileURLWithPath: url.path + extra)
             guard fileManager.fileExists(atPath: source.path) else { continue }
-            let destination = URL(fileURLWithPath: url.path + suffix + extra)
-            try? fileManager.removeItem(at: destination)
-            try fileManager.moveItem(at: source, to: destination)
+            try fileManager.moveItem(at: source, to: URL(fileURLWithPath: url.path + suffix + extra))
         }
+        return url.lastPathComponent + suffix
     }
 }
 ```
+
+> 리뷰 반영: 손상(NOTADB/CORRUPT)일 때만 격리, 그 외 오류는 그대로 던짐, 격리 파일 이름 충돌 시 -1, -2… (커밋 e79172e)
 
 - [ ] **Step 4: 통과 확인**
 
@@ -2801,30 +2840,42 @@ public struct RetentionService: Sendable {
 
     @discardableResult
     public func purge(settings: RetentionSettings) throws -> PurgeReport {
-        let expired = try store.deleteExpired(settings: settings, now: now(), calendar: calendar)
-        let orphans = try store.sweepOrphanBlobs()
-        Log.retention.info("정리 완료: 만료 \(expired, privacy: .public)건, 고아 blob \(orphans, privacy: .public)개")
-        return PurgeReport(expiredCount: expired, orphanBlobCount: orphans)
+        try purge(settings: settings, at: now())
     }
 
     /// 정리하고 오늘 날짜를 기록한다.
     @discardableResult
     public func purge(using settings: PasterSettings) throws -> PurgeReport {
-        let report = try purge(settings: settings.retention)
-        settings.lastPurgeDay = RetentionSchedule.dayKey(for: now(), calendar: calendar)
-        return report
+        try purge(using: settings, at: now())
     }
 
     /// 마지막 정리 이후 날짜가 바뀌었을 때만 정리한다. 정리했으면 report, 아니면 nil.
     @discardableResult
     public func purgeIfDayChanged(using settings: PasterSettings) throws -> PurgeReport? {
-        guard RetentionSchedule.shouldPurge(lastPurgeDay: settings.lastPurgeDay, now: now(), calendar: calendar) else {
+        // 시계는 호출당 한 번만 읽어 자정에 걸쳐도 기준 시각이 하나로 유지된다
+        let current = now()
+        guard RetentionSchedule.shouldPurge(lastPurgeDay: settings.lastPurgeDay, now: current, calendar: calendar) else {
             return nil
         }
-        return try purge(using: settings)
+        return try purge(using: settings, at: current)
+    }
+
+    private func purge(settings: RetentionSettings, at current: Date) throws -> PurgeReport {
+        let expired = try store.deleteExpired(settings: settings, now: current, calendar: calendar)
+        let orphans = try store.sweepOrphanBlobs()
+        Log.retention.info("정리 완료: 만료 \(expired, privacy: .public)건, 고아 blob \(orphans, privacy: .public)개")
+        return PurgeReport(expiredCount: expired, orphanBlobCount: orphans)
+    }
+
+    private func purge(using settings: PasterSettings, at current: Date) throws -> PurgeReport {
+        let report = try purge(settings: settings.retention, at: current)
+        settings.lastPurgeDay = RetentionSchedule.dayKey(for: current, calendar: calendar)
+        return report
     }
 }
 ```
+
+> 리뷰 반영: 공개 메서드 호출마다 `now()` 를 한 번만 읽어 자정에 걸쳐도 cutoff 와 날짜 키가 같은 시각을 쓴다 (커밋 86fa7f4).
 
 - [ ] **Step 6: 통과 확인**
 
