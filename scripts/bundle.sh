@@ -4,7 +4,8 @@
 #   release -> build/Paster.app        (make app, make install, make release)
 #   debug   -> build/debug/Paster.app  (make run)
 # 환경 변수:
-#   VERSION       CFBundleShortVersionString (기본 0.0.0)
+#   VERSION       CFBundleShortVersionString (기본 0.0.0).
+#                 debug 빌드와 0.0.0 빌드는 Sparkle 피드(SUFeedURL)가 빠진다 (개발 빌드가 릴리스로 덮어쓰이지 않도록)
 #   SIGN_IDENTITY 서명 인증서 이름 (기본 "Paster Local Signing").
 #                 "-" 를 명시하면 ad-hoc 서명 (CI 등 인증서가 없는 곳 전용. 손쉬운 사용 권한이 빌드마다 초기화된다)
 set -euo pipefail
@@ -48,6 +49,9 @@ elif ! security find-identity -v -p codesigning | grep -qF "\"$IDENTITY\""; then
     exit 1
 fi
 
+# 경고: CFBundleVersion 은 Sparkle 이 업데이트 여부를 가르는 값이라 반드시 단조 증가해야 한다.
+# 작업 브랜치(Paster)를 main 에 squash merge 하면 커밋 수가 줄어 빌드 번호가 되돌아가고,
+# 이미 설치된 앱이 새 릴리스를 업데이트로 인식하지 못한다. main 에는 merge commit 이나 fast-forward 로만 합친다.
 BUILD_NUMBER="$(git rev-list --count HEAD)"
 
 swift build -c "$CONFIG"
@@ -72,6 +76,15 @@ cp Resources/Info.plist "$PLIST"
 "$PLIST_BUDDY" -c "Set :CFBundleShortVersionString $VERSION" "$PLIST"
 "$PLIST_BUDDY" -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST"
 "$PLIST_BUDDY" -c "Set :SUPublicEDKey $PUBLIC_KEY" "$PLIST"
+
+# 개발 빌드 (debug, 또는 VERSION=0.0.0) 는 실제 릴리스 피드를 보지 않게 한다.
+# 같은 번들 ID · 데이터를 쓰는데 빌드 번호가 더 낮으면 Sparkle 이 정식 릴리스로 개발 빌드를 덮어쓸 수 있다.
+# SUFeedURL 이 없으면 "업데이트 확인…" 은 Sparkle 설정 오류를 보여 준다 (개발 빌드에서는 정상).
+if [ "$CONFIG" = "debug" ] || [ "$VERSION" = "0.0.0" ]; then
+    "$PLIST_BUDDY" -c "Delete :SUFeedURL" "$PLIST"
+    "$PLIST_BUDDY" -c "Add :SUEnableAutomaticChecks bool false" "$PLIST"
+    echo "note: 개발 빌드라 Sparkle 업데이트 피드(SUFeedURL)를 끕니다."
+fi
 
 # rpath 정리: SwiftPM 이 넣는 빌드 머신의 절대 경로 rpath (예: /Users/<이름>/.../.build/...) 는
 # 공개 바이너리에 사용자 이름을 남기고 쓸모도 없으므로 지운다. 서명 전에 해야 한다.
