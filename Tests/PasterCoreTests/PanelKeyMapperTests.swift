@@ -27,11 +27,29 @@ struct PanelKeyMapperTests {
     }
 
     @Test func commandShortcuts() {
-        #expect(key(18, .command, "1") == .cmdNumber(1))
-        #expect(key(25, .command, "9") == .cmdNumber(9))
         #expect(key(35, .command, "p") == .cmdP)
         #expect(key(Code.delete, .command) == .cmdDelete)
         #expect(key(8, .command, "c") == nil)
+    }
+
+    @Test(arguments: [(18, 1), (19, 2), (20, 3), (21, 4), (23, 5), (22, 6), (26, 7), (28, 8), (25, 9)] as [(UInt16, Int)])
+    func commandNumberByKeyCode(code: UInt16, number: Int) {
+        #expect(key(code, .command, String(number)) == .cmdNumber(number))
+        // 한글 등 다른 입력 소스에서도 물리 키 코드로 판별한다
+        #expect(key(code, .command, "ㅁ") == .cmdNumber(number))
+    }
+
+    @Test func commandPMatchesKeyCodeUnderNonLatinInput() {
+        #expect(key(35, .command, "ㅔ") == .cmdP)
+        #expect(key(35, .command, nil) == .cmdP)
+        #expect(key(35, .command, "P") == .cmdP)
+    }
+
+    @Test func modifiersMustMatchExactly() {
+        #expect(key(Code.returnKey, [.shift, .command]) == nil)
+        #expect(key(Code.returnKey, .option) == nil)
+        #expect(key(18, [.shift, .command], "!") == nil)
+        #expect(key(35, [.shift, .command], "p") == nil)
     }
 
     @Test func escape() {

@@ -22,6 +22,8 @@ public enum PanelKeyMapper {
         public static let rightArrow: UInt16 = 124
         public static let downArrow: UInt16 = 125
         public static let upArrow: UInt16 = 126
+        /// kVK_ANSI_P
+        public static let p: UInt16 = 35
         /// 숫자 줄 1~9 (자판 배열과 무관한 물리 키)
         public static let digits: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
     }
@@ -59,7 +61,8 @@ public enum PanelKeyMapper {
 
         if modifiers == .command {
             if let digit = KeyCode.digits.firstIndex(of: keyCode) { return .cmdNumber(digit + 1) }
-            if characters?.lowercased() == "p" { return .cmdP }
+            // 한글 등 다른 입력 소스에서는 글자가 "p" 가 아니므로 키 코드로도 판별한다
+            if keyCode == KeyCode.p || characters?.lowercased() == "p" { return .cmdP }
             return nil
         }
         // ⌘/⌃ 없이 글자를 만드는 키는 검색창 입력이다
