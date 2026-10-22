@@ -121,7 +121,7 @@ Tests/PasterCoreTests/
 | `ImageConverter` | `png(from:) -> PNGImage?`, `convert(_:to:) -> Data?` |
 | `BlobStore` | `directory`, `write(_:)`, `url(for:)`, `read(_:)`, `remove(_:)`, `allNames()` |
 | `ClipStore` | `open(directory:now:)`, `inMemory(blobDirectory:)`, `blobs`, `dbQueue`, `item(id:)`, `save(_:now:) -> SaveOutcome`, `touch(id:now:)`, `fetchUnpinned(matching:settings:now:calendar:limit:)`, `fetchPinned(matching:)`, `pin(id:now:)`, `unpin(id:now:)`, `movePinned(id:direction:)`, `delete(id:)`, `deleteAllUnpinned()`, `deleteExpired(settings:now:calendar:)`, `sweepOrphanBlobs()` |
-| `PasterSettings` | `init(defaults:)`, `retention`, `excludedBundleIDs`, `lastPurgeDay`, `makeCapture()` |
+| `PasterSettings` | `init(store:)`, `retention`, `excludedBundleIDs`, `lastPurgeDay`, `makeCapture()` |
 | `RetentionSchedule` | `nextMidnight(after:calendar:)`, `dayKey(for:calendar:)`, `shouldPurge(lastPurgeDay:now:calendar:)` |
 | `RetentionService` | `init(store:calendar:now:)`, `purge(settings:)`, `purge(using:)`, `purgeIfDayChanged(using:)` |
 | `PanelState` / `PanelFocus` / `PanelColumn` / `PasteMode` | `focus query clipboardCount pinnedCount clipboardIndex pinnedIndex activeColumn activeIndex count(of:) selectedIndex(in:) updateCounts(clipboard:pinned:) setQuery(_:)` |
