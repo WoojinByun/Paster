@@ -50,7 +50,16 @@ final class ClipboardMonitor {
         let isExcluded = source.bundleID.map(capture.excludedBundleIDs.contains) ?? false
         let snapshot = PasteboardReader.snapshot(of: pasteboard, readContent: !isExcluded)
         // 읽는 도중 다른 앱이 썼다면 타입과 내용이 섞였을 수 있다. 버리고 다음 폴링에서 다시 읽는다
-        guard pasteboard.changeCount == changeCount else { return }
+        guard pasteboard.changeCount == changeCount else {
+            Log.capture.debug("읽는 중 changeCount 가 바뀌어 버림")
+            return
+        }
+        // clearContents 없이 마커만 덧붙이면 changeCount 가 그대로라 타입을 다시 확인한다
+        if !PasteboardReader.hasSkipMarker(snapshot.types),
+           PasteboardReader.hasSkipMarker(PasteboardReader.types(of: pasteboard)) {
+            Log.capture.debug("읽는 중 건너뜀 마커가 붙어 버림")
+            return
+        }
         lastChangeCount = changeCount
 
         let store = store
