@@ -135,6 +135,7 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 - Pin 항목은 만료되지 않는다.
 - Pin 해제 시 `last_copied_at = now` 로 설정한다 (해제 즉시 삭제되는 것을 방지).
 - 조회 시에도 만료 항목은 쿼리에서 제외한다 (정리 전이라도 화면에 나오지 않음).
+- 설정의 전체 삭제 (Clear All History) 는 미고정 항목과 그 blob 만 삭제하고, Pinned 항목은 유지한다. 삭제 전에 확인 대화상자를 띄운다.
 
 ### 7.2 정리 시점
 
@@ -150,7 +151,7 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 ### 8.1 열기 / 닫기
 
 - 기본 단축키 `⌃⌥⌘V` (설정에서 변경 가능).
-- 메뉴바 아이콘 클릭으로도 열린다.
+- 메뉴바 아이콘을 클릭하면 메뉴가 열리고, 메뉴의 `Paster 열기` 로 패널을 연다.
 - 마우스가 있는 화면의 중앙에 약 760×520 크기로 표시한다.
 - 바깥 클릭 시 닫힌다.
 - Esc: 검색어가 있으면 지우고, 없으면 닫는다.
@@ -175,7 +176,8 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 - 열면 검색창에 포커스가 간다.
 - 검색창에서 ↓ → Clipboard 칼럼.
 - 목록에서 ←/→ → 칼럼 전환 (Clipboard ↔ Pinned).
-- Clipboard 맨 위 항목에서 ↑ → 검색창.
+- 각 칼럼 (Clipboard / Pinned) 의 맨 위 항목에서 ↑ → 검색창.
+- 왼쪽 칼럼에서 ←, 오른쪽 칼럼에서 → 는 아무 동작도 하지 않는다.
 - 검색창 안에서 ←/→ 는 커서 이동만 한다.
 - 목록 포커스 중 글자를 입력하면 검색창으로 돌아가 이어서 입력된다.
 - 칼럼별 마지막 선택 위치를 기억한다.
