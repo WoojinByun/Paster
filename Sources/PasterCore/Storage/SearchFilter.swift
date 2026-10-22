@@ -11,12 +11,16 @@ struct SearchFilter: Equatable {
         case like(patterns: [String])
     }
 
+    /// 아주 긴 검색어가 SQLite 바인딩 변수 한도를 넘지 않도록 단어 수를 제한한다.
+    static let maxTerms = 32
+
     let terms: [Term]
 
     init(query: String) {
         terms = query
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
+            .prefix(Self.maxTerms)
             .map(Self.term(for:))
     }
 

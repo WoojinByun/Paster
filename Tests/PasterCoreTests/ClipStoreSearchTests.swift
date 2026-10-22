@@ -128,4 +128,13 @@ struct ClipStoreSearchTests {
         #expect(patterns[0].unicodeScalars.elementsEqual("\"\(nfc)\"".unicodeScalars))
         #expect(patterns[1].unicodeScalars.elementsEqual("\"\(nfd)\"".unicodeScalars))
     }
+
+    @Test func filterKeepsOnlyTheFirst32Terms() throws {
+        let words = (1...100).map { "word\($0)" }
+        let filter = SearchFilter(query: words.joined(separator: " "))
+        #expect(filter.terms.count == 32)
+        #expect(filter.terms.first == .fullText(patterns: ["\"word1\""]))
+        #expect(filter.terms.last == .fullText(patterns: ["\"word32\""]))
+        #expect(try search(words.joined(separator: " ")).isEmpty)
+    }
 }
