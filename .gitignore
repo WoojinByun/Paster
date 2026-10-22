@@ -4,3 +4,8 @@ build/
 *.p12
 *.pem
 .DS_Store
+
+# 비밀 키 내보내기 파일 (Sparkle: generate_keys -x) 실수 커밋 방지. Resources/sparkle-public-key.txt 는 커밋한다.
+*.key
+*private-key*
+*.p8
