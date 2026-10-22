@@ -53,8 +53,7 @@ final class RetentionServiceTests {
 
     init() throws {
         store = try Fixtures.makeStore()
-        suite = "RetentionServiceTests-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suite)!
+        (suite, defaults) = Fixtures.makeDefaultsSuite(prefix: "RetentionServiceTests")
         settings = PasterSettings(defaults: defaults)
         let calendar = Self.seoulCalendar
         let clock = clock
@@ -62,7 +61,7 @@ final class RetentionServiceTests {
     }
 
     deinit {
-        defaults.removePersistentDomain(forName: suite)
+        Fixtures.removeDefaultsSuite(defaults, named: suite)
     }
 
     static var seoulCalendar: Calendar {

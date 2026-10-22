@@ -8,13 +8,12 @@ final class PasterSettingsTests {
     let settings: PasterSettings
 
     init() {
-        suite = "PasterSettingsTests-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suite)!
+        (suite, defaults) = Fixtures.makeDefaultsSuite(prefix: "PasterSettingsTests")
         settings = PasterSettings(defaults: defaults)
     }
 
     deinit {
-        defaults.removePersistentDomain(forName: suite)
+        Fixtures.removeDefaultsSuite(defaults, named: suite)
     }
 
     @Test func defaultsWhenEmpty() {
