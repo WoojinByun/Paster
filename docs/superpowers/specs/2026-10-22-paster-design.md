@@ -72,8 +72,8 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
   - `blobs/<uuid>.png`
 - 설정: `UserDefaults`
 - 번들 ID: `com.wjbyun.Paster`
-- SQLite `secure_delete` 를 켠다. 삭제한 행의 내용이 DB 파일의 빈 페이지에 남지 않게 하기 위해서다.
-- 손상된 DB 를 격리한 경우 (`paster.sqlite.corrupt-<timestamp>`, 10절), 격리본이 참조하던 blob 은 새 DB 의 고아 blob 정리가 지우지 않는다.
+- SQLite `secure_delete` 를 켠다. 삭제한 행의 내용이 DB 파일의 빈 페이지에 남지 않게 하기 위해서다. SQLite 3.44 이상이면 FTS5 인덱스(`clip_fts`)의 `secure-delete` 옵션도 켠다 (실행할 때마다 확인).
+- 손상된 DB 를 격리하면 `blobs/` 를 먼저 같은 접미사의 `blobs.corrupt-<timestamp>` 로 옮긴 뒤 DB 파일(`paster.sqlite.corrupt-<timestamp>`, 10절)을 옮기고 빈 `blobs/` 를 새로 만든다. 따라서 격리본이 참조하던 blob 은 새 DB 의 고아 blob 정리가 지우지 않는다. 이름이 겹치면 DB 와 blob 디렉터리 모두 `-1`, `-2` … 를 붙인다.
 
 ### 테이블 `clip_items`
 
@@ -105,7 +105,7 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 - 제외 목록 앱. 직전 폴링 이후 제외 앱이 한 번이라도 frontmost 였으면 그 복사는 건너뛴다 (폴링 사이에 앱을 전환해도 제외 앱의 복사가 다른 앱 출처로 저장되지 않게 한다). 이때 내용은 읽지도 않는다.
 - Paster 자체 마커 타입 (`com.wjbyun.paster.internal`)
 - 꺼진 타입 (캡처하지 않음)
-- 텍스트가 20 MB (UTF-8 바이트 기준) 를 넘는 항목 (캡처하지 않음)
+- 텍스트 항목의 크기 (plain text 의 UTF-8 바이트 + RTF + HTML 바이트 합계) 가 20 MB (20 × 1024 × 1024 바이트) 를 넘는 항목 (캡처하지 않음, 크기만 로그로 남김)
 
 ### 5.2 타입 우선순위
 
@@ -120,7 +120,7 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 - PNG 로 변환해 저장한다 (TIFF 는 거대하기 때문).
 - 붙여넣을 때는 PNG + TIFF 둘 다 pasteboard 에 쓴다.
 - PNG 결과가 100MB 를 초과하면 건너뛰고 로그를 남긴다.
-- 텍스트는 20 MB 를 초과하면 건너뛴다 (5.1절).
+- 텍스트는 plain text(UTF-8) + RTF + HTML 합계가 20 MB 를 초과하면 건너뛴다 (5.1절).
 
 ### 5.4 중복 처리
 
@@ -247,7 +247,8 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 
 ## 10. 오류 처리
 
-- DB 열기 실패 / 손상: `paster.sqlite.corrupt-<timestamp>` 로 보존하고 새 DB 를 만든다.
+- DB 손상 (SQLITE_NOTADB / SQLITE_CORRUPT 또는 quick_check 실패): `blobs.corrupt-<timestamp>` 와 `paster.sqlite.corrupt-<timestamp>` 로 보존하고 빈 `blobs/` 와 새 DB 를 만든다. 그 밖의 열기 실패 (BUSY · 권한 등) 는 DB 를 건드리지 않고 오류로 끝낸다.
+- 잠금 파일(`paster.lock`)을 만들거나 잠글 수 없음: "잠금 파일을 만들 수 없습니다." 와 오류 설명을 알리고 종료한다.
 - 이미지 저장 실패 / 100MB 초과: 건너뛰고 로그를 남긴다.
 - 다른 인스턴스가 실행 중: 저장소를 열기 전에 "Paster가 이미 실행 중입니다" 를 알리고 종료한다 (3.1절).
 - 로깅은 `os.Logger` (subsystem `com.wjbyun.Paster`). 클립보드 내용은 로그에 남기지 않는다.
@@ -272,7 +273,7 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 - `make run`: debug 빌드를 같은 인증서로 서명해 `build/debug/Paster.app` 으로 실행 (개발용)
 - `make icon`: `Resources/AppIcon.svg` → `Resources/AppIcon.icns`
 - 대상은 arm64 전용이다. Intel Mac 은 지원하지 않는다.
-- 개발 빌드 (debug 구성, 또는 `VERSION=0.0.0`) 는 Info.plist 에서 `SUFeedURL` 을 지우고 `SUEnableAutomaticChecks` 를 `false` 로 둔다. 개발 빌드는 릴리스와 같은 번들 ID · 데이터를 쓰는데 빌드 번호가 더 낮아, 피드가 있으면 Sparkle 이 정식 릴리스로 개발 빌드를 덮어쓸 수 있기 때문이다. 이 빌드의 `업데이트 확인…` 은 Sparkle 설정 오류를 보여 주며 정상이다. 업데이트를 받는 앱은 Releases 의 zip 이나 `VERSION=x.y.z` 를 지정한 빌드로 설치한다.
+- 개발 빌드 (debug 구성, 또는 `VERSION=0.0.0`) 는 Info.plist 에 `SUFeedURL` 이 없어 업데이트를 받지 않는다. 개발 빌드는 릴리스와 같은 번들 ID · 데이터를 쓰는데 빌드 번호가 더 낮아, 피드가 있으면 Sparkle 이 정식 릴리스로 개발 빌드를 덮어쓸 수 있기 때문이다. 피드가 없으면 앱은 첫 실행 때 자동 확인을 켜지 않고, 설정의 "자동으로 업데이트 확인" 토글을 비활성화하고 "개발용 빌드: 업데이트 피드가 없습니다" 를 보여 준다. 메뉴의 `업데이트 확인…` 은 그대로 켜 두며, 누르면 Sparkle 설정 오류를 보여 주는 것이 정상이다. 업데이트를 받는 앱은 Releases 의 zip 이나 `VERSION=x.y.z` 를 지정한 빌드로 설치한다.
 - `make install`: `/Applications` 로 복사 (SMAppService 의 안정적 동작을 위해)
 - `make test`: `swift test`
 - `make sparkle-keys`: Sparkle 의 `generate_keys` 를 1회 실행 (13절 참조)
@@ -281,14 +282,14 @@ Paster <CFBundleShortVersionString> (<CFBundleVersion>)   (비활성, 회색)
 ## 13. 자동 업데이트 (Sparkle)
 
 - 앱에 `SPUStandardUpdaterController` 를 둔다. 메뉴의 `업데이트 확인…` 은 `checkForUpdates` 를 호출한다. 업데이트가 발견되면 Sparkle 표준 창이 릴리스 노트를 보여주고 설치 후 재실행을 제안한다.
-- SettingsView 에 "자동으로 업데이트 확인" 체크박스를 두고 `updater.automaticallyChecksForUpdates` 에 바인딩한다. 기본값 ON, Sparkle 기본 확인 주기는 매일.
+- SettingsView 에 "자동으로 업데이트 확인" 체크박스를 두고 `updater.automaticallyChecksForUpdates` 에 바인딩한다. 기본값 ON, Sparkle 기본 확인 주기는 매일. 피드가 없는 개발 빌드에서는 기본값을 켜지 않고 체크박스를 비활성화한다 (12절).
 - Info.plist
   - `SUFeedURL` = `https://github.com/WoojinByun/Paster/releases/latest/download/appcast.xml` (정식 `VERSION` 으로 만든 빌드만. 개발 빌드는 12절)
   - `SUPublicEDKey` (EdDSA 공개 키)
   - `SUEnableAutomaticChecks` 는 정식 빌드에서는 체크박스에 맡기고 따로 지정하지 않는다. 개발 빌드는 `false` 로 둔다.
 - 키: `make sparkle-keys` 가 Sparkle 의 `generate_keys` 를 1회 실행한다. EdDSA 개인 키는 로그인 키체인에 보관하며 절대 커밋하지 않는다. Info.plist 에는 공개 키만 넣는다.
 - 버전: `CFBundleShortVersionString` = `VERSION=x.y.z` 의 semver. `CFBundleVersion` = 단조 증가 빌드 번호 (`git rev-list --count HEAD`).
-  - 빌드 번호가 커밋 수에 의존하므로 main 에는 merge commit 이나 fast-forward 로만 합치고 squash merge 는 하지 않는다. squash 하면 번호가 되돌아가 (작업 브랜치 약 67, main 1) 이미 설치된 앱이 새 릴리스를 업데이트로 인식하지 못한다.
+  - 빌드 번호가 커밋 수에 의존하므로 main 에는 merge commit 이나 fast-forward 로만 합치고 squash merge 는 하지 않는다. squash 하면 번호가 되돌아가 이미 설치된 앱이 새 릴리스를 업데이트로 인식하지 못한다.
 - 예약 확인에서 업데이트를 찾으면 `SPUStandardUserDriverDelegate` 의 gentle reminder 로 메뉴바 아이콘에 점 배지를 붙인다 (3.3절).
 - `make release VERSION=x.y.z` 순서
   1. release 빌드
@@ -329,3 +330,9 @@ docs/superpowers/specs/
 - 빌드 번호와 merge 전략 (13절): squash merge 금지.
 - arm64 전용 (3.1 / 12절).
 - 로그인 시 실행은 기본 꺼짐이며 켜기를 권장한다 (3.1 / 7.2절). `make run` · `make icon` 을 12절에 추가했다.
+- FTS `secure-delete` (4절): 마이그레이션이 아니라 실행할 때마다 SQLite 버전을 확인해 켠다. 3.44 미만에서 처음 실행했어도 OS 업데이트 뒤 켜진다.
+- 손상 DB 격리 순서 (4 / 10절): `blobs/` 를 먼저 옮기고 DB 파일을 옮긴다. DB 파일을 옮기다 실패하면 `blobs/` 를 되돌리고 오류로 끝낸다.
+- 텍스트 20 MB 상한은 plain text + RTF + HTML 합계 기준이다 (5.1 / 5.3절).
+- 잠금 파일 오류 (10절): 이미 실행 중인 경우와 따로 "잠금 파일을 만들 수 없습니다." 를 알린다.
+- 개발 빌드 (12 / 13절): 피드가 없어 업데이트를 받지 않으며 설정의 자동 확인 토글을 비활성화한다.
+- 패널 행 제목: 목록 행은 앞 `ClipStore.listTextLimit` 글자만 들고 있어, 첫 비어 있지 않은 줄이 그보다 뒤에 있으면 "(공백)" 으로 보인다.

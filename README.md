@@ -134,7 +134,7 @@ make icon      # Resources/AppIcon.svg -> Resources/AppIcon.icns (아이콘을 �
 
 `make app` / `make run` 은 Sparkle 공개 키 파일(`Resources/sparkle-public-key.txt`, 저장소에 포함)이 필요합니다.
 
-개발 빌드(`make run` 과 `VERSION` 을 지정하지 않은 `make app` / `make install`)에서는 Sparkle 피드(`SUFeedURL`)가 빠지고 자동 확인이 꺼집니다. 정식 릴리스가 개발 빌드를 덮어쓰지 않게 하려는 것이며, 이 빌드의 `업데이트 확인…` 은 Sparkle 설정 오류를 보여 주는 것이 정상입니다. 업데이트를 받는 앱이 필요하면 Releases 의 zip 으로 설치하거나 `VERSION=x.y.z` 를 지정해 빌드하세요.
+개발 빌드(`make run` 과 `VERSION` 을 지정하지 않은 `make app` / `make install`)에는 Sparkle 피드(`SUFeedURL`)가 없어 업데이트를 받지 않습니다. 정식 릴리스가 개발 빌드를 덮어쓰지 않게 하려는 것입니다. 설정의 "자동으로 업데이트 확인" 은 비활성화되고, `업데이트 확인…` 을 누르면 Sparkle 설정 오류가 보이는 것이 정상입니다. 업데이트를 받는 앱이 필요하면 Releases 의 zip 으로 설치하거나 `VERSION=x.y.z` 를 지정해 빌드하세요.
 
 `make cert` 가 필요한 이유: ad-hoc 서명은 재빌드마다 서명이 달라져 손쉬운 사용 권한을 다시 요청하게 됩니다. 고정된 자체 서명 인증서로 서명하면 재빌드해도 권한이 유지됩니다. 마지막 단계에서 인증서를 코드서명용으로 신뢰하려고 macOS 가 로그인 암호를 묻습니다.
 
