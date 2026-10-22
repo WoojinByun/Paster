@@ -1,17 +1,34 @@
-.PHONY: cert test run icon sparkle-keys
+VERSION ?= 0.0.0
+DEV_APP := build/debug/Paster.app
+DEV_BIN := $(CURDIR)/$(DEV_APP)/Contents/MacOS/Paster
+INSTALLED_BIN := /Applications/Paster.app/Contents/MacOS/Paster
+
+.PHONY: cert app install test run icon sparkle-keys
 
 # 최초 1회: 자체 서명 인증서 "Paster Local Signing" (로그인 암호 입력 필요)
 cert:
 	./scripts/make-cert.sh
 
+# build/Paster.app (release) 빌드 + 서명
+app:
+	VERSION=$(VERSION) ./scripts/bundle.sh release
+
+# /Applications 로 복사하고 실행. 설치된 Paster 만 종료한다 (make run 으로 띄운 개발 빌드는 건드리지 않음)
+install: app
+	@pkill -f "^$(INSTALLED_BIN)$$" && sleep 1 || true
+	rm -rf /Applications/Paster.app
+	ditto build/Paster.app /Applications/Paster.app
+	open /Applications/Paster.app
+
 test:
 	swift test
 
-# 개발용 실행: debug .app 을 만들어 연다
+# 개발용 실행: debug 빌드를 같은 인증서로 서명해 build/debug/Paster.app 으로 연다.
+# 이 체크아웃의 개발 빌드만 종료한다 (/Applications 에 설치한 Paster 는 건드리지 않음)
 run:
-	./scripts/dev-bundle.sh
-	-pkill -x Paster && sleep 1
-	open build/debug/Paster.app
+	VERSION=$(VERSION) ./scripts/bundle.sh debug
+	@pkill -f "^$(DEV_BIN)$$" && sleep 1 || true
+	open $(DEV_APP)
 
 # 아이콘을 바꿨을 때: Resources/AppIcon.svg -> Resources/AppIcon.icns
 icon:
