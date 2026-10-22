@@ -1,4 +1,8 @@
-.PHONY: test run
+.PHONY: cert test run
+
+# 최초 1회: 자체 서명 인증서 "Paster Local Signing" (로그인 암호 입력 필요)
+cert:
+	./scripts/make-cert.sh
 
 test:
 	swift test
