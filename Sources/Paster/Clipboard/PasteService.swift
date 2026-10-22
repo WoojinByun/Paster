@@ -69,18 +69,27 @@ final class PasteService {
     }
 
     /// 직전 앱을 활성화하고, 활성화가 끝나면 ⌘V 를 보낸다.
-    func activateAndPaste(into target: NSRunningApplication?) async {
-        if let target, !target.isTerminated {
-            target.activate()
-            let deadline = Date().addingTimeInterval(0.5)
-            while NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier,
-                  Date() < deadline {
-                try? await Task.sleep(for: .milliseconds(20))
-            }
+    /// 직전 앱이 없거나 활성화되지 않으면 ⌘V 를 보내지 않는다 (클립은 pasteboard 에 남는다).
+    @discardableResult
+    func activateAndPaste(into target: NSRunningApplication?) async -> Bool {
+        guard let target, !target.isTerminated else {
+            Log.app.info("직전 앱이 없어 ⌘V 를 건너뜀")
+            return false
+        }
+        target.activate()
+        let deadline = Date().addingTimeInterval(0.5)
+        while NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier,
+              Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else {
+            Log.app.info("직전 앱 활성화 시간 초과로 ⌘V 를 건너뜀")
+            return false
         }
         // 활성화 직후 키 입력을 놓치지 않도록 잠깐 기다린다
         try? await Task.sleep(for: .milliseconds(50))
         Self.postCommandV()
+        return true
     }
 
     private static func postCommandV() {
