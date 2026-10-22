@@ -3,7 +3,7 @@ DEV_APP := build/debug/Paster.app
 DEV_BIN := $(CURDIR)/$(DEV_APP)/Contents/MacOS/Paster
 INSTALLED_BIN := /Applications/Paster.app/Contents/MacOS/Paster
 
-.PHONY: cert app install test run icon sparkle-keys
+.PHONY: cert app install test run icon sparkle-keys release
 
 # 최초 1회: 자체 서명 인증서 "Paster Local Signing" (로그인 암호 입력 필요)
 cert:
@@ -38,3 +38,10 @@ icon:
 sparkle-keys:
 	swift package resolve
 	./scripts/sparkle-keys.sh
+
+# 공개 릴리스: main 에서 build/release/ 에 zip · appcast.xml 을 만들고 확인 후 GitHub Release 로 올린다.
+#   make release VERSION=x.y.z            요약을 보여 주고 y 입력 후 업로드
+#   make release VERSION=x.y.z DRY_RUN=1  업로드 직전까지만 (결과물은 build/release/)
+#   make release VERSION=x.y.z CONFIRM=1  확인 질문 생략
+release:
+	./scripts/release.sh $(VERSION)

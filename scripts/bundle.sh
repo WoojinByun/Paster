@@ -18,7 +18,14 @@ PLIST_BUDDY=/usr/libexec/PlistBuddy
 CODESIGN_TIMEOUT=60
 
 case "$CONFIG" in
-    release) APP="build/Paster.app" ;;
+    release)
+        APP="build/Paster.app"
+        # 기본값 0.0.0 (make app) 은 그대로 허용하고, 지정한 버전만 x.y.z 형식인지 검사한다
+        if [ "$VERSION" != "0.0.0" ] && [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "error: VERSION 은 x.y.z 형식이어야 합니다 (받은 값: '$VERSION')." >&2
+            exit 1
+        fi
+        ;;
     debug) APP="build/debug/Paster.app" ;;
     *)
         echo "error: 사용법: $0 [release|debug]" >&2
