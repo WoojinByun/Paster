@@ -53,7 +53,9 @@ struct ClipStoreQueryTests {
         try store.dbQueue.write { db in
             try db.execute(sql: "UPDATE clip_items SET pinned_at = ?, pin_order = 0 WHERE id = ?", arguments: [Fixtures.now, id])
         }
+        try Fixtures.save(Fixtures.textClip("stale unpinned"), in: store, at: Fixtures.now.addingTimeInterval(-365 * 24 * hour))
         #expect(try store.fetchPinned().count == 1)
+        #expect(try store.fetchUnpinned(settings: .default, now: Fixtures.now).isEmpty)
     }
 
     @Test func limitCapsResults() throws {

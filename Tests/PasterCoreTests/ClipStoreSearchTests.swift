@@ -65,10 +65,67 @@ struct ClipStoreSearchTests {
         #expect(try store.fetchPinned(matching: "보고서").isEmpty)
     }
 
+    @Test func nfdTextClipIsFoundByNFCTrigramQuery() throws {
+        try Fixtures.save(Fixtures.textClip("/Users/me/분기 보고서.pdf".decomposedStringWithCanonicalMapping), in: store)
+        #expect(try search("보고서".precomposedStringWithCanonicalMapping).count == 2)
+    }
+
+    @Test func nfdTextClipIsFoundByNFCLikeQuery() throws {
+        try Fixtures.save(Fixtures.textClip("/Users/me/분기 보고서.pdf".decomposedStringWithCanonicalMapping), in: store)
+        #expect(try search("보고".precomposedStringWithCanonicalMapping).count == 2)
+    }
+
+    @Test func nfcClipIsFoundByNFDQuery() throws {
+        #expect(try search("체크리".decomposedStringWithCanonicalMapping) == ["배포 체크리스트 정리"])
+        #expect(try search("배".decomposedStringWithCanonicalMapping) == ["배포 체크리스트 정리"])
+    }
+
+    @Test func storedNFDTextIsNotAltered() throws {
+        let nfd = "분기 보고서".decomposedStringWithCanonicalMapping
+        try Fixtures.save(Fixtures.textClip(nfd), in: store)
+        let found = try store.fetchUnpinned(matching: "보고서", settings: .default, now: later).map(\.plainText)
+        #expect(found.contains { $0.unicodeScalars.elementsEqual(nfd.unicodeScalars) })
+    }
+
+    @Test func allTermsMustMatch() throws {
+        #expect(try search("배포 정리") == ["배포 체크리스트 정리"])
+        #expect(try search("정리   배포") == ["배포 체크리스트 정리"])
+        #expect(try search("배포 없는말") == [])
+    }
+
+    @Test func shortTermsCombineWithAnd() throws {
+        #expect(try search("정 배포") == ["배포 체크리스트 정리"])
+    }
+
+    @Test func termsMixTrigramAndLike() throws {
+        #expect(try search("체크리 정") == ["배포 체크리스트 정리"])
+        #expect(try search("체크리 없") == [])
+    }
+
+    @Test func operatorsInsideQuotedTermsAreLiteral() throws {
+        try Fixtures.save(Fixtures.textClip("a*b c-d"), in: store)
+        #expect(try search("a*b") == ["a*b c-d"])
+        #expect(try search("NEAR OR") == [])
+    }
+
     @Test func filterParsing() {
-        #expect(SearchFilter(query: "  ") == .none)
-        #expect(SearchFilter(query: "ab") == .like(pattern: "%ab%"))
-        #expect(SearchFilter(query: "abc") == .fullText(pattern: "\"abc\""))
-        #expect(SearchFilter(query: "a\"b") == .fullText(pattern: "\"a\"\"b\""))
+        #expect(SearchFilter(query: "  ").terms.isEmpty)
+        #expect(SearchFilter(query: "ab").terms == [.like(patterns: ["%ab%"])])
+        #expect(SearchFilter(query: "abc").terms == [.fullText(patterns: ["\"abc\""])])
+        #expect(SearchFilter(query: "a\"b").terms == [.fullText(patterns: ["\"a\"\"b\""])])
+        #expect(SearchFilter(query: "ab  abc").terms == [.like(patterns: ["%ab%"]), .fullText(patterns: ["\"abc\""])])
+    }
+
+    @Test func filterParsingKeepsNFCAndNFDVariants() {
+        let nfc = "보고서".precomposedStringWithCanonicalMapping
+        let nfd = "보고서".decomposedStringWithCanonicalMapping
+        guard case let .fullText(patterns) = SearchFilter(query: nfd).terms.first else {
+            Issue.record("fullText 단어가 아님")
+            return
+        }
+        // String == 는 정규 동등이라 스칼라로 비교한다
+        #expect(patterns.count == 2)
+        #expect(patterns[0].unicodeScalars.elementsEqual("\"\(nfc)\"".unicodeScalars))
+        #expect(patterns[1].unicodeScalars.elementsEqual("\"\(nfd)\"".unicodeScalars))
     }
 }
