@@ -7,6 +7,7 @@ struct ClipRowView: View {
     let isPinned: Bool
     let isSelected: Bool
     let isFocused: Bool
+    let hasMissingFiles: Bool
     let hint: String?
 
     var body: some View {
@@ -20,7 +21,7 @@ struct ClipRowView: View {
             Text(item.title)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            if item.kind == .files, !item.missingFilePaths().isEmpty {
+            if hasMissingFiles {
                 Text("⚠").help("원본 파일이 없습니다")
             }
             Spacer(minLength: 4)

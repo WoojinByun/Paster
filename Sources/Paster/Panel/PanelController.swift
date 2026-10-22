@@ -12,6 +12,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var keyMonitor: Any?
     /// 패널을 열기 직전의 frontmost 앱. 붙여넣기 대상.
     private var previousApp: NSRunningApplication?
+    /// orderOut → windowDidResignKey → close() 재진입 방지
+    private var isClosing = false
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -29,9 +31,8 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func show() {
         let frontmost = NSWorkspace.shared.frontmostApplication
-        if frontmost?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-            previousApp = frontmost
-        }
+        // 자기 자신이 frontmost 면 예전 대상을 쓰지 않는다
+        previousApp = frontmost?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : frontmost
         model.resetForOpen()
         panel.centerOnMouseScreen()
         panel.makeKeyAndOrderFront(nil)
@@ -42,6 +43,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func close() {
+        guard !isClosing else { return }
+        isClosing = true
+        defer { isClosing = false }
         removeKeyMonitor()
         panel.orderOut(nil)
     }
@@ -81,6 +85,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         let modifiers = KeyModifiers(event.modifierFlags)
         // 메인 메뉴가 없는 앱이라 ⌘C/⌘V 등 편집 단축키를 직접 보낸다
         if modifiers == .command, let action = Self.editAction(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers) {
+            // 목록 포커스면 먼저 검색창으로 돌아간다
+            if model.state.focus != .search { model.send(.textInput) }
+            focusSearchField()
             NSApp.sendAction(action, to: nil, from: nil)
             return nil
         }
@@ -92,13 +99,20 @@ final class PanelController: NSObject, NSWindowDelegate {
 
         let effect = model.send(key)
         if effect == .passThrough {
-            // 검색창이 항상 first responder 이지만, 혹시 잃었으면 되돌린다
-            if let field = model.searchField, panel.firstResponder !== field.currentEditor() {
-                panel.makeFirstResponder(field)
-            }
+            focusSearchField()
             return event
         }
         return nil
+    }
+
+    /// 검색창이 항상 first responder 이지만, 혹시 잃었으면 되돌린다.
+    /// 되돌릴 때 전체 선택이 되므로 커서를 끝으로 옮겨 이어서 입력되게 한다.
+    private func focusSearchField() {
+        guard let field = model.searchField, panel.firstResponder !== field.currentEditor() else { return }
+        panel.makeFirstResponder(field)
+        if let editor = field.currentEditor() {
+            editor.selectedRange = NSRange(location: (editor.string as NSString).length, length: 0)
+        }
     }
 
     /// 검색창 field editor 에 조합 중인 글자가 있는지.
@@ -108,17 +122,16 @@ final class PanelController: NSObject, NSWindowDelegate {
         return (editor as? NSTextView)?.hasMarkedText() ?? false
     }
 
-    /// 한글 입력 소스에서도 동작하도록 키 코드(kVK_ANSI_*)로 먼저 판별한다.
+    /// 글자(ASCII)로 먼저 판별해 Dvorak 등 배열을 따른다.
+    /// 한글 등 ASCII 가 아닌 입력 소스일 때만 키 코드(kVK_ANSI_*)로 판별한다.
     private static func editAction(keyCode: UInt16, characters: String?) -> Selector? {
-        switch keyCode {
-        case 7: return #selector(NSText.cut(_:))
-        case 8: return #selector(NSText.copy(_:))
-        case 9: return #selector(NSText.paste(_:))
-        case 0: return #selector(NSText.selectAll(_:))
-        case 6: return Selector(("undo:"))
-        default: break
+        let letter: String?
+        if let characters, !characters.isEmpty, characters.allSatisfy(\.isASCII) {
+            letter = characters.lowercased()
+        } else {
+            letter = [7: "x", 8: "c", 9: "v", 0: "a", 6: "z"][keyCode]
         }
-        switch characters?.lowercased() {
+        switch letter {
         case "x": return #selector(NSText.cut(_:))
         case "c": return #selector(NSText.copy(_:))
         case "v": return #selector(NSText.paste(_:))

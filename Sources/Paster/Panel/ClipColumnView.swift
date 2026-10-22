@@ -9,7 +9,10 @@ struct ClipColumnView: View {
 
     private var items: [ClipItem] { model.items(in: column) }
     private var selectedIndex: Int { model.state.selectedIndex(in: column) }
-    private var isFocused: Bool { model.state.activeColumn == column }
+    /// ⌘숫자 힌트 대상 (검색창 포커스면 Clipboard)
+    private var isActive: Bool { model.state.activeColumn == column }
+    /// 실제 키보드 포커스. 강조 색은 이때만 쓴다
+    private var hasFocus: Bool { model.state.focus == (column == .clipboard ? .clipboard : .pinned) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,10 +47,11 @@ struct ClipColumnView: View {
                             item: item,
                             isPinned: column == .pinned,
                             isSelected: index == selectedIndex,
-                            isFocused: isFocused,
-                            hint: isFocused && index < 9 ? "⌘\(index + 1)" : nil
+                            isFocused: hasFocus,
+                            hasMissingFiles: item.id.map(model.hasMissingFiles) ?? false,
+                            hint: isActive && index < 9 ? "⌘\(index + 1)" : nil
                         )
-                        .id(index)
+                        .id(item.id)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) { model.send(.doubleClick(column, index)) }
                         .onTapGesture { model.send(.click(column, index)) }
@@ -55,7 +59,7 @@ struct ClipColumnView: View {
                 }
             }
             .onChange(of: selectedIndex) { _, newValue in
-                proxy.scrollTo(newValue)
+                if items.indices.contains(newValue) { proxy.scrollTo(items[newValue].id) }
             }
         }
     }

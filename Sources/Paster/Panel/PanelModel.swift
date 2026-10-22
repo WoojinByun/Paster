@@ -24,6 +24,8 @@ final class PanelModel {
     var state = PanelState()
     private(set) var clipboardItems: [ClipItem] = []
     private(set) var pinnedItems: [ClipItem] = []
+    /// 원본 파일이 하나라도 없는 파일 항목. 행마다 파일 시스템을 보지 않도록 reload 때 한 번 계산한다
+    private(set) var missingFileIDs: Set<Int64> = []
     var message: PanelMessage?
 
     @ObservationIgnored private let store: ClipStore
@@ -51,6 +53,9 @@ final class PanelModel {
         do {
             clipboardItems = try store.fetchUnpinned(matching: state.query, settings: settings.retention, now: Date())
             pinnedItems = try store.fetchPinned(matching: state.query)
+            missingFileIDs = Set((clipboardItems + pinnedItems).compactMap { item in
+                item.kind == .files && !item.missingFilePaths().isEmpty ? item.id : nil
+            })
         } catch {
             Log.app.error("목록 읽기 실패: \(String(describing: error), privacy: .public)")
         }
@@ -90,6 +95,10 @@ final class PanelModel {
     func item(_ column: PanelColumn, _ index: Int) -> ClipItem? {
         let items = column == .clipboard ? clipboardItems : pinnedItems
         return items.indices.contains(index) ? items[index] : nil
+    }
+
+    func hasMissingFiles(_ id: Int64) -> Bool {
+        missingFileIDs.contains(id)
     }
 
     func items(in column: PanelColumn) -> [ClipItem] {
