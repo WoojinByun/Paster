@@ -33,7 +33,7 @@ Expected: `Apple Swift version 6.4 ...` 와 `3.54.0 ...` (SQLite 3.34 이상이�
 - **GRDB 7.11.1** 의 `Package.swift` 는 `SQLITE_ENABLE_FTS5` 를 정의하므로 시스템 SQLite 로도 GRDB 의 FTS5 Swift API 가 켜진다. 다만 `trigram` 토크나이저용 Swift 헬퍼는 없으므로 이 계획은 **raw SQL** 로 `CREATE VIRTUAL TABLE ... USING fts5(..., content='clip_items', content_rowid='id', tokenize='trigram')` 와 동기화 트리거를 만든다. 시스템 SQLite 3.54.0 에서 한글 3글자 부분 문자열 검색이 동작함을 확인했다.
 - **Swift Testing** 은 `swift test` 로 바로 돈다. 출력 마지막 줄 형식: `✔ Test run with N tests in M suites passed after ...`. 매개변수화 테스트(`@Test(arguments:)`)는 1개로 센다. `swift test --filter <SuiteName>` 도 동작한다.
 - `UserDefaults` 는 이 SDK 에서 `Sendable` 이 아니다. 그래서 `PasterSettings` 는 `@unchecked Sendable` 로 둔다.
-- `URL(fileURLWithPath:).lastPathComponent` 는 한글을 NFD(자모 분해)로 돌려줄 수 있다. NFD 로 저장하면 NFC 검색어와 trigram 이 맞지 않으므로, 파일명은 저장 전에 `precomposedStringWithCanonicalMapping` 으로 NFC 로 맞춘다 (테스트로 확인).
+- `URL(fileURLWithPath:).lastPathComponent` 는 한글을 NFD(자모 분해)로 돌려줄 수 있다. NFD 로 저장하면 NFC 검색어와 trigram 이 맞지 않으므로, 파일명은 저장 전에 `precomposedStringWithCanonicalMapping` 으로 NFC 로 맞춘다 (테스트로 확인). 검색은 저장된 텍스트가 NFC 든 NFD 든 찾을 수 있도록 검색어의 NFC · NFD 두 형태를 모두 매칭한다 (Task 8).
 - `Calendar.nextDate(after:matching: DateComponents(hour: 0, minute: 0, second: 0), matchingPolicy: .nextTime)` 은 0시가 없는 날(2018-11-04 상파울루)에 그날 01:00 을 돌려준다.
 
 ## 스펙과 다르게 정한 점
@@ -1636,10 +1636,12 @@ git commit -m "feat(core): add ClipStore schema, FTS5 index and dedup save" -m "
 스펙 6절(검색: trigram, 1~2글자 LIKE, 대상 `plain_text` · 파일명 · 출처 앱 이름, 두 칼럼 모두에 적용), 7.1절(조회 시에도 만료 항목 제외, Pin 은 만료 없음), 8.3절(Clipboard 는 미고정만, Pinned 는 `pin_order` 순).
 
 검색 규칙:
-- 앞뒤 공백을 자르고 NFC 로 정규화한다.
-- 유니코드 스칼라 3개 이상: `id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)`, 패턴은 큰따옴표로 감싼 구(phrase)이고 안의 `"` 는 `""` 로 이스케이프한다. FTS 연산자(`OR`, `NEAR` 등)가 해석되지 않는다.
-- 1~2개: `plain_text LIKE ? ESCAPE '\'` 또는 `source_app_name LIKE ?`. `%`, `_`, `\` 는 이스케이프한다.
+- 검색어를 공백(개행 포함)으로 나눈 단어마다 조건을 만들고 모두 만족해야 한다(AND). 빈 검색어는 조건이 없다.
+- 저장된 텍스트는 NFC 일 수도 NFD 일 수도 있으므로(파일명만 저장 시 NFC 로 맞춘다), 단어마다 NFC 와 NFD 두 변형을 OR 로 찾는다. 두 변형이 스칼라 단위로 같으면(ASCII 등) 하나만 쓴다. Swift `String ==` 는 정규 동등이라 스칼라로 비교한다.
+- 단어의 NFC 유니코드 스칼라가 3개 이상: `id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)`, 패턴은 큰따옴표로 감싼 구(phrase)이고 안의 `"` 는 `""` 로 이스케이프한다. FTS 연산자(`OR`, `NEAR` 등)가 해석되지 않는다.
+- 1~2개: `plain_text LIKE ? ESCAPE '\'` 또는 `source_app_name LIKE ?`. `%`, `_`, `\` 는 이스케이프한다. trigram 인지 LIKE 인지는 단어마다 따로 정한다.
 - trigram 과 LIKE 모두 ASCII 대소문자를 구분하지 않는다.
+- 리뷰 반영: NFD 텍스트 검색, 다중 단어 AND (커밋 8776cb4)
 
 만료 제외 조건: 종류마다 `kind = ? AND last_copied_at >= cutoff` 를 OR 로 묶는다. 꺼진 타입도 기간이 지날 때까지는 보인다 (스펙 7.1절).
 
@@ -1709,7 +1711,9 @@ struct ClipStoreQueryTests {
         try store.dbQueue.write { db in
             try db.execute(sql: "UPDATE clip_items SET pinned_at = ?, pin_order = 0 WHERE id = ?", arguments: [Fixtures.now, id])
         }
+        try Fixtures.save(Fixtures.textClip("stale unpinned"), in: store, at: Fixtures.now.addingTimeInterval(-365 * 24 * hour))
         #expect(try store.fetchPinned().count == 1)
+        #expect(try store.fetchUnpinned(settings: .default, now: Fixtures.now).isEmpty)
     }
 
     @Test func limitCapsResults() throws {
@@ -1793,11 +1797,68 @@ struct ClipStoreSearchTests {
         #expect(try store.fetchPinned(matching: "보고서").isEmpty)
     }
 
+    @Test func nfdTextClipIsFoundByNFCTrigramQuery() throws {
+        try Fixtures.save(Fixtures.textClip("/Users/me/분기 보고서.pdf".decomposedStringWithCanonicalMapping), in: store)
+        #expect(try search("보고서".precomposedStringWithCanonicalMapping).count == 2)
+    }
+
+    @Test func nfdTextClipIsFoundByNFCLikeQuery() throws {
+        try Fixtures.save(Fixtures.textClip("/Users/me/분기 보고서.pdf".decomposedStringWithCanonicalMapping), in: store)
+        #expect(try search("보고".precomposedStringWithCanonicalMapping).count == 2)
+    }
+
+    @Test func nfcClipIsFoundByNFDQuery() throws {
+        #expect(try search("체크리".decomposedStringWithCanonicalMapping) == ["배포 체크리스트 정리"])
+        #expect(try search("배".decomposedStringWithCanonicalMapping) == ["배포 체크리스트 정리"])
+    }
+
+    @Test func storedNFDTextIsNotAltered() throws {
+        let nfd = "분기 보고서".decomposedStringWithCanonicalMapping
+        try Fixtures.save(Fixtures.textClip(nfd), in: store)
+        let found = try store.fetchUnpinned(matching: "보고서", settings: .default, now: later).map(\.plainText)
+        #expect(found.contains { $0.unicodeScalars.elementsEqual(nfd.unicodeScalars) })
+    }
+
+    @Test func allTermsMustMatch() throws {
+        #expect(try search("배포 정리") == ["배포 체크리스트 정리"])
+        #expect(try search("정리   배포") == ["배포 체크리스트 정리"])
+        #expect(try search("배포 없는말") == [])
+    }
+
+    @Test func shortTermsCombineWithAnd() throws {
+        #expect(try search("정 배포") == ["배포 체크리스트 정리"])
+    }
+
+    @Test func termsMixTrigramAndLike() throws {
+        #expect(try search("체크리 정") == ["배포 체크리스트 정리"])
+        #expect(try search("체크리 없") == [])
+    }
+
+    @Test func operatorsInsideQuotedTermsAreLiteral() throws {
+        try Fixtures.save(Fixtures.textClip("a*b c-d"), in: store)
+        #expect(try search("a*b") == ["a*b c-d"])
+        #expect(try search("NEAR OR") == [])
+    }
+
     @Test func filterParsing() {
-        #expect(SearchFilter(query: "  ") == .none)
-        #expect(SearchFilter(query: "ab") == .like(pattern: "%ab%"))
-        #expect(SearchFilter(query: "abc") == .fullText(pattern: "\"abc\""))
-        #expect(SearchFilter(query: "a\"b") == .fullText(pattern: "\"a\"\"b\""))
+        #expect(SearchFilter(query: "  ").terms.isEmpty)
+        #expect(SearchFilter(query: "ab").terms == [.like(patterns: ["%ab%"])])
+        #expect(SearchFilter(query: "abc").terms == [.fullText(patterns: ["\"abc\""])])
+        #expect(SearchFilter(query: "a\"b").terms == [.fullText(patterns: ["\"a\"\"b\""])])
+        #expect(SearchFilter(query: "ab  abc").terms == [.like(patterns: ["%ab%"]), .fullText(patterns: ["\"abc\""])])
+    }
+
+    @Test func filterParsingKeepsNFCAndNFDVariants() {
+        let nfc = "보고서".precomposedStringWithCanonicalMapping
+        let nfd = "보고서".decomposedStringWithCanonicalMapping
+        guard case let .fullText(patterns) = SearchFilter(query: nfd).terms.first else {
+            Issue.record("fullText 단어가 아님")
+            return
+        }
+        // String == 는 정규 동등이라 스칼라로 비교한다
+        #expect(patterns.count == 2)
+        #expect(patterns[0].unicodeScalars.elementsEqual("\"\(nfc)\"".unicodeScalars))
+        #expect(patterns[1].unicodeScalars.elementsEqual("\"\(nfd)\"".unicodeScalars))
     }
 }
 ```
@@ -1815,42 +1876,65 @@ Expected: 빌드 실패 `error: value of type 'ClipStore' has no member 'fetchUn
 import Foundation
 import GRDB
 
-/// 검색어 → SQL 조건. 3글자 이상은 FTS5 trigram, 1~2글자는 LIKE.
-enum SearchFilter: Equatable {
-    case none
-    case fullText(pattern: String)
-    case like(pattern: String)
+/// 검색어 → SQL 조건. 공백으로 나눈 단어를 모두 만족해야 한다(AND).
+/// 단어마다 3글자 이상은 FTS5 trigram, 1~2글자는 LIKE.
+struct SearchFilter: Equatable {
+    enum Term: Equatable {
+        /// MATCH 패턴. NFC / NFD 변형 중 하나라도 맞으면 통과한다.
+        case fullText(patterns: [String])
+        /// LIKE 패턴. NFC / NFD 변형 중 하나라도 맞으면 통과한다.
+        case like(patterns: [String])
+    }
+
+    let terms: [Term]
 
     init(query: String) {
-        let trimmed = query
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .precomposedStringWithCanonicalMapping
-        if trimmed.isEmpty {
-            self = .none
-        } else if trimmed.unicodeScalars.count >= 3 {
+        terms = query
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .map(Self.term(for:))
+    }
+
+    private static func term(for raw: String) -> Term {
+        let nfc = raw.precomposedStringWithCanonicalMapping
+        // 저장된 텍스트는 NFC 일 수도 NFD 일 수도 있어서 두 형태를 모두 찾는다
+        var variants = [nfc]
+        let nfd = raw.decomposedStringWithCanonicalMapping
+        // Swift String 의 == 는 정규 동등이라 NFC/NFD 를 같다고 보므로 스칼라로 비교한다
+        if !nfd.unicodeScalars.elementsEqual(nfc.unicodeScalars) { variants.append(nfd) }
+
+        if nfc.unicodeScalars.count >= 3 {
             // 큰따옴표로 감싸 FTS 문법을 무력화하고 부분 문자열로 찾는다
-            self = .fullText(pattern: "\"" + trimmed.replacingOccurrences(of: "\"", with: "\"\"") + "\"")
-        } else {
-            let escaped = trimmed
+            return .fullText(patterns: variants.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" })
+        }
+        return .like(patterns: variants.map { variant in
+            let escaped = variant
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "%", with: "\\%")
                 .replacingOccurrences(of: "_", with: "\\_")
-            self = .like(pattern: "%" + escaped + "%")
-        }
+            return "%" + escaped + "%"
+        })
     }
 
     var sql: SQL? {
-        switch self {
-        case .none:
-            return nil
-        case let .fullText(pattern):
-            return SQL(sql: "id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)", arguments: [pattern])
-        case let .like(pattern):
-            return SQL(
-                sql: "(plain_text LIKE ? ESCAPE '\\' OR IFNULL(source_app_name, '') LIKE ? ESCAPE '\\')",
-                arguments: [pattern, pattern]
-            )
+        guard !terms.isEmpty else { return nil }
+        var clauses: [String] = []
+        var arguments: [any DatabaseValueConvertible] = []
+        for term in terms {
+            switch term {
+            case let .fullText(patterns):
+                clauses.append("(" + patterns
+                    .map { _ in "id IN (SELECT rowid FROM clip_fts WHERE clip_fts MATCH ?)" }
+                    .joined(separator: " OR ") + ")")
+                arguments += patterns
+            case let .like(patterns):
+                clauses.append("(" + patterns
+                    .map { _ in "plain_text LIKE ? ESCAPE '\\' OR IFNULL(source_app_name, '') LIKE ? ESCAPE '\\'" }
+                    .joined(separator: " OR ") + ")")
+                arguments += patterns.flatMap { [$0, $0] }
+            }
         }
+        return SQL(sql: clauses.joined(separator: " AND "), arguments: StatementArguments(arguments))
     }
 }
 ```
@@ -1914,7 +1998,7 @@ extension ClipStore {
 Run: `swift test`
 Expected: `✔ Test run with 49 tests in 8 suites passed`
 
-`fileNamesAreSearchable` 가 실패하면 `StoreFixtures.filesClip` 의 NFC 정규화가 빠진 것이다.
+`fileNamesAreSearchable` 가 실패하면 `StoreFixtures.filesClip` 의 NFC 정규화가 빠진 것이다. 파일명 NFC 정규화는 저장 시에만 강제하고, 검색은 저장된 텍스트가 NFC 든 NFD 든 검색어의 NFC · NFD 두 형태를 모두 찾는다 (`nfdTextClipIsFoundByNFCTrigramQuery` 등).
 
 - [ ] **Step 7: 커밋**
 
