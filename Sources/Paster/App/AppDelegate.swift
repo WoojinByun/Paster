@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var environment: AppEnvironment?
     private var monitor: ClipboardMonitor?
+    private var scheduler: RetentionScheduler?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
@@ -28,6 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let monitor = ClipboardMonitor(store: environment.store, settings: environment.settings)
         monitor.start()
         self.monitor = monitor
+
+        let scheduler = RetentionScheduler(service: environment.retention, settings: environment.settings)
+        scheduler.start()
+        self.scheduler = scheduler
 
         statusItem = makeStatusItem()
     }
