@@ -4,8 +4,31 @@ import PasterCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var environment: AppEnvironment?
+    private var monitor: ClipboardMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let environment: AppEnvironment
+        do {
+            environment = try AppEnvironment()
+        } catch {
+            Log.app.fault("저장소를 열 수 없음: \(String(describing: error), privacy: .public)")
+            // 다른 인스턴스가 DB 를 잡고 있는 경우 등. 크래시 대신 알리고 종료한다
+            let alert = NSAlert()
+            alert.messageText = "Paster를 시작할 수 없습니다"
+            alert.informativeText = "데이터베이스를 열 수 없습니다. Paster가 이미 실행 중인지 확인해 주세요."
+            // .accessory 앱이라 활성화하지 않으면 알림이 다른 창 뒤에 숨을 수 있다
+            NSApp.activate()
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
+        self.environment = environment
+
+        let monitor = ClipboardMonitor(store: environment.store, settings: environment.settings)
+        monitor.start()
+        self.monitor = monitor
+
         statusItem = makeStatusItem()
     }
 
