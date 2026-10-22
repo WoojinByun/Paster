@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environment: AppEnvironment?
     private var monitor: ClipboardMonitor?
     private var scheduler: RetentionScheduler?
+    private var panelController: PanelController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment: AppEnvironment
@@ -26,14 +27,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.environment = environment
 
+        let panelController = PanelController(environment: environment)
+        self.panelController = panelController
+
         let monitor = ClipboardMonitor(store: environment.store, settings: environment.settings)
+        monitor.onSaved = { [weak panelController] in panelController?.reloadIfVisible() }
         monitor.start()
         self.monitor = monitor
 
         let scheduler = RetentionScheduler(service: environment.retention, settings: environment.settings)
+        scheduler.onPurged = { [weak panelController] in panelController?.reloadIfVisible() }
         scheduler.start()
         self.scheduler = scheduler
 
+        HotkeyService.register { [weak panelController] in panelController?.toggle() }
+        AccessibilityPermission.requestOnFirstLaunch()
         statusItem = makeStatusItem()
     }
 
@@ -87,9 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return "Paster \(short) (\(build))"
     }
 
-    /// 패널은 Task 5 에서 연결한다.
     @objc private func openPanel() {
-        Log.app.info("Paster 열기 선택")
+        panelController?.show()
     }
 
     /// 설정 창은 Task 6 에서 연결한다.
