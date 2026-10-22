@@ -22,13 +22,14 @@ enum PanelMessage: Equatable {
 @Observable
 final class PanelModel {
     var state = PanelState()
+    /// 목록 투영(`ClipStore.fetchUnpinned` 참고). 붙여넣기 · 미리보기는 `fullItem` 으로 전체를 다시 읽는다
     private(set) var clipboardItems: [ClipItem] = []
     private(set) var pinnedItems: [ClipItem] = []
     /// 원본 파일이 하나라도 없는 파일 항목. 행마다 파일 시스템을 보지 않도록 reload 때 한 번 계산한다
     private(set) var missingFileIDs: Set<Int64> = []
     var message: PanelMessage?
 
-    @ObservationIgnored private let store: ClipStore
+    @ObservationIgnored let store: ClipStore
     @ObservationIgnored private let settings: PasterSettings
     /// SearchField 가 만들어지면 자기 자신을 등록한다.
     @ObservationIgnored weak var searchField: NSTextField?
@@ -95,6 +96,11 @@ final class PanelModel {
     func item(_ column: PanelColumn, _ index: Int) -> ClipItem? {
         let items = column == .clipboard ? clipboardItems : pinnedItems
         return items.indices.contains(index) ? items[index] : nil
+    }
+
+    /// rtf · html · 전체 본문까지 담은 항목. 붙여넣기 직전에 읽는다.
+    func fullItem(id: Int64) throws -> ClipItem? {
+        try store.item(id: id)
     }
 
     func hasMissingFiles(_ id: Int64) -> Bool {

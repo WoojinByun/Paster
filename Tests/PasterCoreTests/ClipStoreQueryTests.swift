@@ -64,4 +64,59 @@ struct ClipStoreQueryTests {
         }
         #expect(try store.fetchUnpinned(settings: .default, now: Fixtures.now.addingTimeInterval(10), limit: 3).count == 3)
     }
+
+    // MARK: 목록 투영
+
+    private func richClip(_ text: String) -> CapturedClip {
+        var clip = Fixtures.textClip(text)
+        clip.rtf = Data("{\\rtf1 \(text)}".utf8)
+        clip.html = Data("<b>\(text)</b>".utf8)
+        return clip
+    }
+
+    @Test func listRowsLeaveOutRichDataAndCapText() throws {
+        let long = "첫 줄\n" + String(repeating: "가", count: ClipStore.listTextLimit * 2)
+        let unpinnedID = try Fixtures.save(richClip(long), in: store)
+        let pinnedID = try Fixtures.save(richClip("pinned " + long), in: store)
+        try store.pin(id: pinnedID, now: Fixtures.now)
+
+        let rows = try store.fetchUnpinned(settings: .default, now: Fixtures.now) + store.fetchPinned()
+        #expect(rows.map(\.id) == [unpinnedID, pinnedID])
+        for row in rows {
+            #expect(row.rtf == nil)
+            #expect(row.html == nil)
+            #expect(row.plainText.count == ClipStore.listTextLimit)
+        }
+        #expect(rows[0].title == "첫 줄")
+        #expect(rows[0].byteSize == long.utf8.count)
+        #expect(rows[0].contentHash == Fixtures.textClip(long).contentHash)
+    }
+
+    @Test func fullItemByIDKeepsEverything() throws {
+        let long = String(repeating: "나", count: ClipStore.listTextLimit + 10)
+        let id = try Fixtures.save(richClip(long), in: store)
+        let full = try #require(try store.item(id: id))
+        #expect(full.plainText == long)
+        #expect(full.rtf == Data("{\\rtf1 \(long)}".utf8))
+        #expect(full.html == Data("<b>\(long)</b>".utf8))
+    }
+
+    @Test func searchStillMatchesTextBeyondListCap() throws {
+        let long = String(repeating: "x", count: ClipStore.listTextLimit + 100) + " 꼬리말찾기"
+        let id = try Fixtures.save(Fixtures.textClip(long), in: store)
+        try Fixtures.save(Fixtures.textClip("other"), in: store)
+        #expect(try store.fetchUnpinned(matching: "꼬리말", settings: .default, now: Fixtures.now).map(\.id) == [id])
+        #expect(try store.fetchUnpinned(matching: "꼬리", settings: .default, now: Fixtures.now).map(\.id) == [id])
+    }
+
+    @Test func listRowsKeepImageAndFileFields() throws {
+        let imageID = try Fixtures.save(Fixtures.imageClip(seed: 3), in: store, at: Fixtures.now)
+        let filesID = try Fixtures.save(Fixtures.filesClip(["/tmp/a.txt", "/tmp/b.txt"]), in: store, at: Fixtures.now.addingTimeInterval(1))
+        let rows = try store.fetchUnpinned(settings: .default, now: Fixtures.now.addingTimeInterval(2))
+        #expect(rows.map(\.id) == [filesID, imageID])
+        #expect(rows[0].filePaths == ["/tmp/a.txt", "/tmp/b.txt"])
+        #expect(rows[1].imageBlob != nil)
+        #expect(rows[1].imageWidth == 4)
+        #expect(rows[1].sourceAppName == "Finder")
+    }
 }

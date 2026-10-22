@@ -15,6 +15,36 @@ struct ClipItemTests {
         #expect(item(.text, text: "한 줄").title == "한 줄")
     }
 
+    @Test func textTitleSkipsLeadingBlankLines() {
+        #expect(item(.text, text: "\n\n   \n\t\n  셋째  \n넷째").title == "셋째")
+    }
+
+    @Test func textTitleHandlesCRLF() {
+        #expect(item(.text, text: "\r\n\r\n첫 줄\r\n둘째 줄").title == "첫 줄")
+        #expect(item(.text, text: "한 줄\r\n").title == "한 줄")
+    }
+
+    @Test func whitespaceOnlyTextShowsPlaceholder() {
+        #expect(item(.text, text: "   \n\t\n  ").title == ClipItem.blankTitle)
+        #expect(item(.text, text: "").title == ClipItem.blankTitle)
+    }
+
+    @Test func longFirstLineIsCapped() {
+        let title = item(.text, text: String(repeating: "가", count: 5_000) + "\n둘째").title
+        #expect(title.count == ClipItem.maxTitleLength)
+    }
+
+    @Test func veryLargeTextGivesFirstLine() {
+        // 수 MB 짜리 본문도 앞부분만 보고 제목을 만든다 (정확성만 확인)
+        let body = "  제목 줄  \n" + String(repeating: "본문 내용 한 줄입니다.\n", count: 400_000)
+        #expect(item(.text, text: body).title == "제목 줄")
+    }
+
+    @Test func blankPrefixLongerThanScanLimitShowsPlaceholder() {
+        let body = String(repeating: " \n", count: 10_000) + "늦은 줄"
+        #expect(item(.text, text: body).title == ClipItem.blankTitle)
+    }
+
     @Test func imageTitleShowsSizeAndBytes() {
         #expect(item(.image, size: 1_234_567, width: 1292, height: 878).title == "Image: 1292x878 (1.2 MB)")
     }

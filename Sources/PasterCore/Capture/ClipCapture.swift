@@ -10,6 +10,8 @@ public enum CaptureSkipReason: Equatable, Sendable {
     case kindDisabled(ClipKind)
     case empty
     case imageTooLarge
+    /// 텍스트 + RTF + HTML 크기가 `maxTextBytes` 를 넘었다.
+    case textTooLarge
     case imageUnreadable
 }
 
@@ -62,19 +64,24 @@ public enum CaptureResult: Equatable, Sendable {
 /// PasteboardSnapshot → CapturedClip 변환 규칙 (스펙 5절).
 public struct ClipCapture: Sendable {
     public static let defaultMaxImageBytes = 100 * 1024 * 1024
+    public static let defaultMaxTextBytes = 20 * 1024 * 1024
 
     public var excludedBundleIDs: Set<String>
     public var enabledKinds: Set<ClipKind>
     public var maxImageBytes: Int
+    /// 텍스트 클립의 plainText(UTF-8) + RTF + HTML 합계 상한.
+    public var maxTextBytes: Int
 
     public init(
         excludedBundleIDs: Set<String> = [],
         enabledKinds: Set<ClipKind> = Set(ClipKind.allCases),
-        maxImageBytes: Int = ClipCapture.defaultMaxImageBytes
+        maxImageBytes: Int = ClipCapture.defaultMaxImageBytes,
+        maxTextBytes: Int = ClipCapture.defaultMaxTextBytes
     ) {
         self.excludedBundleIDs = excludedBundleIDs
         self.enabledKinds = enabledKinds
         self.maxImageBytes = maxImageBytes
+        self.maxTextBytes = maxTextBytes
     }
 
     public func capture(_ snapshot: PasteboardSnapshot, source: SourceApp) -> CaptureResult {
@@ -91,7 +98,7 @@ public struct ClipCapture: Sendable {
 
         switch kind {
         case .files: return .captured(makeFiles(snapshot, source: source))
-        case .text: return .captured(makeText(snapshot, source: source))
+        case .text: return makeText(snapshot, source: source)
         case .image: return makeImage(snapshot, source: source)
         }
     }
@@ -104,17 +111,23 @@ public struct ClipCapture: Sendable {
         return nil
     }
 
-    private func makeText(_ snapshot: PasteboardSnapshot, source: SourceApp) -> CapturedClip {
+    private func makeText(_ snapshot: PasteboardSnapshot, source: SourceApp) -> CaptureResult {
         let text = snapshot.string ?? ""
-        return CapturedClip(
+        let textBytes = text.utf8.count
+        let totalBytes = textBytes + (snapshot.rtf?.count ?? 0) + (snapshot.html?.count ?? 0)
+        guard totalBytes <= maxTextBytes else {
+            Log.capture.error("텍스트 크기 \(totalBytes, privacy: .public) 바이트가 제한을 넘어 건너뜀")
+            return .skipped(.textTooLarge)
+        }
+        return .captured(CapturedClip(
             kind: .text,
             plainText: text,
             rtf: snapshot.rtf,
             html: snapshot.html,
-            byteSize: text.utf8.count,
+            byteSize: textBytes,
             source: source,
             contentHash: ContentHasher.hash(kind: .text, payload: Data(text.utf8))
-        )
+        ))
     }
 
     private func makeFiles(_ snapshot: PasteboardSnapshot, source: SourceApp) -> CapturedClip {

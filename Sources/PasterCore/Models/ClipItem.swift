@@ -93,15 +93,18 @@ extension ClipItem: FetchableRecord, MutablePersistableRecord {
 }
 
 extension ClipItem {
+    /// 공백뿐인 텍스트의 제목.
+    public static let blankTitle = "(공백)"
+    /// 제목 최대 글자 수.
+    public static let maxTitleLength = 200
+    /// 제목을 찾을 때 보는 앞부분 크기 (유니코드 스칼라 수). 아주 긴 본문도 행마다 전체를 나누지 않는다.
+    static let titleScanLimit = 8 * 1024
+
     /// 패널 행 제목.
     public var title: String {
         switch kind {
         case .text:
-            let firstLine = plainText
-                .split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .first { !$0.isEmpty }
-            return firstLine ?? ""
+            return Self.textTitle(plainText)
         case .image:
             return "Image: \(imageWidth ?? 0)x\(imageHeight ?? 0) (\(ByteSize.format(byteSize)))"
         case .files:
@@ -109,6 +112,17 @@ extension ClipItem {
             guard let first = names.first else { return "파일" }
             return names.count == 1 ? "파일: \(first)" : "파일: \(first) 외 \(names.count - 1)개"
         }
+    }
+
+    /// 앞부분에서 처음으로 비어 있지 않은 줄. CRLF 도 한 줄바꿈으로 본다.
+    static func textTitle(_ text: String) -> String {
+        let head = String(String.UnicodeScalarView(text.unicodeScalars.prefix(titleScanLimit)))
+        for line in head.split(whereSeparator: \.isNewline) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            return String(trimmed.prefix(maxTitleLength))
+        }
+        return blankTitle
     }
 
     /// 원본이 사라진 파일 경로들.

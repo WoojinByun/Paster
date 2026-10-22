@@ -99,6 +99,27 @@ struct ClipCaptureTests {
         #expect(capture.capture(snapshot, source: .unknown) == .skipped(.imageTooLarge))
     }
 
+    @Test func textOverSizeCapIsSkipped() {
+        let capture = ClipCapture(maxTextBytes: 10)
+        let snapshot = PasteboardSnapshot(types: [PasteboardType.utf8PlainText], string: "12345678901")
+        #expect(capture.capture(snapshot, source: .unknown) == .skipped(.textTooLarge))
+    }
+
+    @Test func textCapCountsRTFAndHTML() throws {
+        let capture = ClipCapture(maxTextBytes: 10)
+        let fits = PasteboardSnapshot(types: [PasteboardType.utf8PlainText, PasteboardType.rtf],
+                                      string: "12345", rtf: Data("12345".utf8))
+        #expect(try captured(capture.capture(fits, source: .unknown)).plainText == "12345")
+        let over = PasteboardSnapshot(types: [PasteboardType.utf8PlainText, PasteboardType.rtf, PasteboardType.html],
+                                      string: "12345", rtf: Data("1234".utf8), html: Data("12".utf8))
+        #expect(capture.capture(over, source: .unknown) == .skipped(.textTooLarge))
+    }
+
+    @Test func defaultTextCapIs20MB() {
+        #expect(ClipCapture().maxTextBytes == 20 * 1024 * 1024)
+        #expect(ClipCapture.defaultMaxTextBytes == 20 * 1024 * 1024)
+    }
+
     @Test func unreadableImageIsSkipped() {
         let snapshot = PasteboardSnapshot(types: [PasteboardType.tiff], tiff: Data("broken".utf8))
         #expect(capture.capture(snapshot, source: .unknown) == .skipped(.imageUnreadable))

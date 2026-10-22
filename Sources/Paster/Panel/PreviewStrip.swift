@@ -39,17 +39,8 @@ struct PreviewStrip: View {
     private func content(for item: ClipItem) -> some View {
         switch item.kind {
         case .text:
-            let preview = TextPreview.make(for: item)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(preview.text)
-                        .font(.system(.body, design: .monospaced))
-                    if preview.remaining > 0 {
-                        Text("… (\(preview.remaining)자 더 있음)").foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            // 항목이 바뀌면 이전 본문 상태를 버린다
+            TextPreviewView(item: item, store: model.store).id(item.id)
         case .image:
             if let id = item.id, let url = model.blobURL(for: item) {
                 // 항목이 바뀌면 이전 이미지 상태를 버린다
@@ -84,24 +75,71 @@ struct PreviewStrip: View {
     }
 }
 
-/// 텍스트 미리보기: 앞부분만 그린다. 마지막 항목 결과를 기억해 body 마다 다시 세지 않는다.
+/// 텍스트 미리보기: 목록 행의 앞부분을 먼저 보여 주고, 메인 밖에서 전체 본문을 읽어 앞 `limit` 글자로 바꾼다.
+struct TextPreviewView: View {
+    let item: ClipItem
+    let store: ClipStore
+    @State private var loaded: TextPreview.Result?
+
+    var body: some View {
+        let preview = loaded
+            ?? item.id.flatMap(TextPreview.cached(for:))
+            ?? TextPreview.Result(text: item.plainText, remaining: 0)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(preview.text)
+                    .font(.system(.body, design: .monospaced))
+                if preview.remaining > 0 {
+                    Text("… (\(preview.remaining)자 더 있음)").foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: item.id) {
+            guard let id = item.id else { return }
+            if let cached = TextPreview.cached(for: id) {
+                loaded = cached
+                return
+            }
+            let store = store
+            let result = await Task.detached(priority: .userInitiated) { () -> TextPreview.Result? in
+                guard let full = try? store.item(id: id) else { return nil }
+                return TextPreview.make(full.plainText)
+            }.value
+            guard !Task.isCancelled, let result else { return }
+            TextPreview.store(result, for: id)
+            loaded = result
+        }
+    }
+}
+
+/// 텍스트 미리보기 계산 · 마지막 항목 캐시. 항목 본문은 저장 뒤 바뀌지 않으므로 id 로 기억한다.
 @MainActor
 enum TextPreview {
-    static let limit = 20_000
+    struct Result: Sendable {
+        var text: String
+        var remaining: Int
+    }
 
-    private static var last: (id: Int64?, text: String, remaining: Int)?
+    nonisolated static let limit = 20_000
 
-    static func make(for item: ClipItem) -> (text: String, remaining: Int) {
-        if let last, last.id != nil, last.id == item.id { return (last.text, last.remaining) }
-        let full = item.plainText
-        let result: (text: String, remaining: Int)
+    private static var last: (id: Int64, result: Result)?
+
+    static func cached(for id: Int64) -> Result? {
+        guard let last, last.id == id else { return nil }
+        return last.result
+    }
+
+    static func store(_ result: Result, for id: Int64) {
+        last = (id, result)
+    }
+
+    /// 앞 `limit` 글자와 나머지 글자 수. 긴 본문은 오래 걸리므로 메인 밖에서 부른다.
+    nonisolated static func make(_ full: String) -> Result {
         if let cut = full.index(full.startIndex, offsetBy: limit, limitedBy: full.endIndex), cut < full.endIndex {
-            result = (String(full[..<cut]), full[cut...].count)
-        } else {
-            result = (full, 0)
+            return Result(text: String(full[..<cut]), remaining: full[cut...].count)
         }
-        last = (item.id, result.text, result.remaining)
-        return result
+        return Result(text: full, remaining: 0)
     }
 }
 

@@ -159,7 +159,12 @@ final class PanelController: NSObject, NSWindowDelegate {
             case .close:
                 close()
             case let .paste(column, index, mode):
-                guard let item = model.item(column, index) else { return }
+                // 목록 행은 rtf · html 이 없고 본문이 잘린 투영이라 전체 항목을 다시 읽는다
+                guard let id = model.item(column, index)?.id else { return }
+                guard let item = try model.fullItem(id: id) else {
+                    model.reload()
+                    return
+                }
                 paste(item, mode: mode)
             case let .togglePin(column, index):
                 guard let id = model.item(column, index)?.id else { return }
