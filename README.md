@@ -158,6 +158,8 @@ make release VERSION=x.y.z             # 2. 요약을 보여 주고 y 입력 시
 
 빌드 · 서명 · zip · appcast 생성 후 GitHub Release 로 올립니다. 릴리스 노트는 `docs/release-notes/vX.Y.Z.md` 가 있으면 그것을 쓰고, 없으면 직전 태그 이후 커밋 제목을 씁니다.
 
+`make release` 후 설치된 앱에서 업데이트를 확인하려면 3분쯤 기다리세요. GitHub 가 `releases/latest/download/appcast.xml` 리디렉션을 잠시(약 2~3분) 캐시해 두어, 그동안은 이전 릴리스의 `appcast.xml` 을 받아 "최신 버전입니다" 로 나올 수 있습니다.
+
 > ⚠️ **반드시 백업하세요.**
 > - "Paster Local Signing" 인증서: 키체인 접근에서 `.p12` 로 내보내기
 > - Sparkle EdDSA 개인 키: `.build/artifacts/sparkle/Sparkle/bin/generate_keys -x <file>`
