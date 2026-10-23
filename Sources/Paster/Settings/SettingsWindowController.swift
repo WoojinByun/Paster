@@ -20,10 +20,17 @@ final class SettingsWindowController {
     }
 
     private func makeWindow() -> NSWindow {
-        let window = SettingsWindow(contentViewController: NSHostingController(rootView: SettingsView(model: model)))
+        let hostingController = NSHostingController(rootView: SettingsView(model: model))
+        let window = SettingsWindow(contentViewController: hostingController)
         window.title = "Paster 설정"
-        window.styleMask = [.titled, .closable]
+        window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
+        // NSHostingController 는 창을 최소 크기로 만든다. grouped Form 은 최소 높이가 0 이라 제목 막대만 남으므로
+        // 내용 전체 높이(fittingSize)로 열되, 화면보다 크면 화면 높이에 맞춘다 (넘치는 부분은 Form 이 스크롤)
+        let fitting = hostingController.view.fittingSize
+        let visibleHeight = (window.screen ?? NSScreen.main)?.visibleFrame.height ?? fitting.height
+        let maxContentHeight = window.contentRect(forFrameRect: NSRect(x: 0, y: 0, width: fitting.width, height: visibleHeight)).height
+        window.setContentSize(NSSize(width: fitting.width, height: min(fitting.height, maxContentHeight)))
         window.center()
         model.hostWindow = window
         return window

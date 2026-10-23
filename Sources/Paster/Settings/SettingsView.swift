@@ -83,6 +83,8 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480)
+        // grouped Form 은 스크롤 기반이라 최소 높이가 0 이다. 창을 줄여도 내용이 보이도록 하한을 둔다
+        .frame(minHeight: 320)
     }
 
     private func retentionRow(_ title: String, kind: ClipKind) -> some View {
