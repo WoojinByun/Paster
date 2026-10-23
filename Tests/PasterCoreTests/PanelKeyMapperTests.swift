@@ -45,6 +45,20 @@ struct PanelKeyMapperTests {
         #expect(key(35, .command, "P") == .cmdP)
     }
 
+    @Test func commandCommaOpensSettings() {
+        #expect(key(Code.comma, .command, ",") == .cmdComma)
+        // 한글 등 ASCII 가 아닌 입력 소스에서는 키 코드로 판별한다
+        #expect(key(Code.comma, .command, nil) == .cmdComma)
+        #expect(key(Code.comma, .command, "ㅁ") == .cmdComma)
+        // ASCII 글자가 있으면 글자를 따른다 (Dvorak 의 ⌘, 는 다른 물리 키, 같은 물리 키는 ⌘W)
+        #expect(key(13, .command, ",") == .cmdComma)
+        #expect(key(Code.comma, .command, "w") == nil)
+        #expect(key(Code.comma, [.shift, .command], "<") == nil)
+        #expect(key(Code.comma, [.option, .command], "≤") == nil)
+        #expect(key(Code.comma, [.control, .command], ",") == nil)
+        #expect(key(Code.comma, [], ",") == .textInput)
+    }
+
     @Test func modifiersMustMatchExactly() {
         #expect(key(Code.returnKey, [.shift, .command]) == nil)
         #expect(key(Code.returnKey, .option) == nil)

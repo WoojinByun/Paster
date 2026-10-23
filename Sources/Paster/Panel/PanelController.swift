@@ -14,9 +14,12 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var previousApp: NSRunningApplication?
     /// orderOut → windowDidResignKey → close() 재진입 방지
     private var isClosing = false
+    /// ⌘, : 메뉴바 메뉴의 "설정…" 과 같은 경로
+    private let openSettings: () -> Void
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, openSettings: @escaping () -> Void) {
         self.environment = environment
+        self.openSettings = openSettings
         model = PanelModel(store: environment.store, settings: environment.settings)
         pasteService = PasteService(store: environment.store)
         super.init()
@@ -83,7 +86,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         // 한글 등 IME 조합 중에는 Enter · Esc · 화살표까지 모두 검색창(field editor)에 맡긴다
         if isComposingText { return event }
         let modifiers = KeyModifiers(event.modifierFlags)
-        // 메인 메뉴가 없는 앱이라 ⌘C/⌘V 등 편집 단축키를 직접 보낸다
+        // ⌘C/⌘V 등 편집 단축키를 직접 보낸다. 숨은 메인 메뉴보다 먼저 받아
+        // 목록 포커스의 ⌘C(선택 항목 복사)와 검색창 포커스 복귀를 처리한다
         if modifiers == .command, let action = Self.editAction(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers) {
             if model.state.focus != .search {
                 // 목록 포커스의 ⌘C 는 선택 항목 복사 (⌘Enter 와 같은 경로)
@@ -158,6 +162,9 @@ final class PanelController: NSObject, NSWindowDelegate {
                 return
             case .close:
                 close()
+            case .openSettings:
+                close()
+                openSettings()
             case let .paste(column, index, mode):
                 // 목록 행은 rtf · html 이 없고 본문이 잘린 투영이라 전체 항목을 다시 읽는다
                 guard let id = model.item(column, index)?.id else { return }

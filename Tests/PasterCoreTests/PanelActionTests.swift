@@ -11,6 +11,16 @@ struct PanelActionTests {
         PanelReducer.reduce(state, key).1
     }
 
+    // ⌘,
+
+    @Test func cmdCommaOpensSettingsFromAnyFocus() {
+        for state in [search, clipboard, pinned] {
+            let (next, effect) = PanelReducer.reduce(state, .cmdComma)
+            #expect(effect == .openSettings)
+            #expect(next == state)
+        }
+    }
+
     // Enter / ⇧Enter / ⌘Enter
 
     @Test func enterPastesFocusedSelectionFormatted() {

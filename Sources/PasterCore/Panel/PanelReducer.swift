@@ -12,6 +12,8 @@ public enum PanelReducer {
         case .textInput:
             state.focus = .search
             return (state, .passThrough)
+        case .cmdComma:
+            return (state, .openSettings)
         case let .click(column, index):
             guard select(&state, column, index) else { return (state, nil) }
             return (state, nil)
@@ -52,7 +54,7 @@ public enum PanelReducer {
             return paste(state, .clipboard, number - 1, .formatted)
         case .cmdP, .optCmdUp, .optCmdDown:
             return (state, nil)
-        case .escape, .textInput, .click, .doubleClick:
+        case .escape, .textInput, .cmdComma, .click, .doubleClick:
             return (state, nil)
         }
     }
@@ -101,7 +103,7 @@ public enum PanelReducer {
         case .cmdDelete:
             guard index < count else { return (state, nil) }
             return (state, .delete(column, index: index))
-        case .escape, .textInput, .click, .doubleClick:
+        case .escape, .textInput, .cmdComma, .click, .doubleClick:
             return (state, nil)
         }
     }

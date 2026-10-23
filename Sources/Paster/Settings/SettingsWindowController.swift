@@ -15,8 +15,22 @@ final class SettingsWindowController {
         self.window = window
         model.refresh()
         // 메뉴바 앱이라 직접 활성화해야 창이 앞으로 나온다
-        NSApp.activate()
+        Self.activateApp()
         window.makeKeyAndOrderFront(nil)
+        // 활성화가 거절돼도 창은 다른 앱 창 앞에 보이게 한다
+        window.orderFrontRegardless()
+    }
+
+    /// NSApp.activate() 는 협조적 활성화라, 메뉴바 메뉴의 ⌘, 처럼 클릭이 아닌 키로 불리면
+    /// 시스템이 거절해 창이 frontmost 앱 뒤에 열린다. frontmost 앱에서 넘겨받는 방식으로 먼저 활성화한다.
+    private static func activateApp() {
+        let current = NSRunningApplication.current
+        if let frontmost = NSWorkspace.shared.frontmostApplication,
+           frontmost.processIdentifier != current.processIdentifier,
+           current.activate(from: frontmost, options: []) {
+            return
+        }
+        NSApp.activate()
     }
 
     private func makeWindow() -> NSWindow {
@@ -37,7 +51,8 @@ final class SettingsWindowController {
     }
 }
 
-/// 메인 메뉴가 없어 ⌘W 가 동작하지 않으므로 직접 처리한다.
+/// ⌘W 를 직접 처리한다. 숨은 메인 메뉴에도 ⌘W(performClose:) 가 있지만,
+/// 키 창이 메인 메뉴보다 먼저 받으므로 한글 입력 소스에서도 아래 규칙대로 닫힌다.
 private final class SettingsWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // capsLock 등은 무시하고 ⌘ 계열 4개 수정자만 비교한다

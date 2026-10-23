@@ -41,8 +41,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         self.environment = environment
+        installMainMenu()
 
-        let panelController = PanelController(environment: environment)
+        let panelController = PanelController(environment: environment) { [weak self] in self?.openSettings() }
         self.panelController = panelController
 
         let monitor = ClipboardMonitor(store: environment.store, settings: environment.settings)
@@ -75,6 +76,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         alert.runModal()
         NSApp.terminate(nil)
+    }
+
+    // MARK: 메인 메뉴
+
+    /// .accessory 앱이라 화면에 보이지 않는 메인 메뉴.
+    /// Paster 창(패널 · 설정)이 키 창일 때 AppKit 이 ⌘, · ⌘Q · ⌘W · 편집 단축키를 이 메뉴로 보낸다.
+    /// 패널의 키 모니터와 SettingsWindow 의 ⌘W 처리가 먼저 받으므로 그쪽 동작은 바뀌지 않는다.
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenu = NSMenu(title: "Paster")
+        let settings = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        appMenu.addItem(settings)
+        appMenu.addItem(updater.makeMenuItem())
+        appMenu.addItem(.separator())
+        appMenu.addItem(makeQuitItem())
+        mainMenu.addItem(submenuItem(appMenu))
+
+        let editMenu = NSMenu(title: "편집")
+        editMenu.addItem(withTitle: "실행 취소", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "실행 복귀", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "오려두기", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "복사하기", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "붙여넣기", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "전체 선택", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        mainMenu.addItem(submenuItem(editMenu))
+
+        let windowMenu = NSMenu(title: "윈도우")
+        windowMenu.addItem(withTitle: "닫기", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        mainMenu.addItem(submenuItem(windowMenu))
+
+        NSApp.mainMenu = mainMenu
+    }
+
+    private func submenuItem(_ submenu: NSMenu) -> NSMenuItem {
+        let item = NSMenuItem(title: submenu.title, action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    private func makeQuitItem() -> NSMenuItem {
+        let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        quit.target = NSApp
+        return quit
     }
 
     // MARK: 메뉴바
@@ -137,9 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(update)
 
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        quit.target = NSApp
-        menu.addItem(quit)
+        menu.addItem(makeQuitItem())
         return menu
     }
 

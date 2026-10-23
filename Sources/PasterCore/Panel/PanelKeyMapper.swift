@@ -24,6 +24,8 @@ public enum PanelKeyMapper {
         public static let upArrow: UInt16 = 126
         /// kVK_ANSI_P
         public static let p: UInt16 = 35
+        /// kVK_ANSI_Comma
+        public static let comma: UInt16 = 43
         /// 숫자 줄 1~9 (자판 배열과 무관한 물리 키)
         public static let digits: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
     }
@@ -63,6 +65,7 @@ public enum PanelKeyMapper {
             if let digit = KeyCode.digits.firstIndex(of: keyCode) { return .cmdNumber(digit + 1) }
             // 한글 등 다른 입력 소스에서는 글자가 "p" 가 아니므로 키 코드로도 판별한다
             if keyCode == KeyCode.p || characters?.lowercased() == "p" { return .cmdP }
+            if isComma(keyCode: keyCode, characters: characters) { return .cmdComma }
             return nil
         }
         // ⌘/⌃ 없이 글자를 만드는 키는 검색창 입력이다
@@ -72,6 +75,15 @@ public enum PanelKeyMapper {
             return .textInput
         }
         return nil
+    }
+
+    /// 글자(ASCII)로 먼저 판별해 Dvorak 등 배열을 따른다.
+    /// 한글 등 ASCII 가 아닌 입력 소스이거나 글자가 없을 때만 키 코드로 판별한다 (앱의 편집 단축키 · ⌘W 와 같은 규칙).
+    private static func isComma(keyCode: UInt16, characters: String?) -> Bool {
+        if let characters, !characters.isEmpty, characters.allSatisfy(\.isASCII) {
+            return characters == ","
+        }
+        return keyCode == KeyCode.comma
     }
 
     /// C0/C1 제어 문자와 기능 키 영역(U+F700~U+F8FF)

@@ -13,6 +13,8 @@ public enum PanelKey: Equatable, Sendable {
     case optCmdUp
     case optCmdDown
     case cmdDelete
+    /// ⌘, : 설정 창 열기
+    case cmdComma
     case escape
     /// 글자 입력 · ⌫ 등 검색창 편집 키
     case textInput
@@ -30,4 +32,6 @@ public enum PanelEffect: Equatable, Sendable {
     case movePinned(index: Int, direction: MoveDirection)
     case delete(PanelColumn, index: Int)
     case close
+    /// ⌘, : 패널을 닫고 설정 창을 연다
+    case openSettings
 }
