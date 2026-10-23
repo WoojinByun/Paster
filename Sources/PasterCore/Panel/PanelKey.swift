@@ -12,6 +12,12 @@ public enum PanelKey: Equatable, Sendable {
     case cmdP
     case optCmdUp
     case optCmdDown
+    /// PageUp (fn+↑) / PageDown (fn+↓): `PanelState.pageSize` 행씩 이동
+    case pageUp
+    case pageDown
+    /// Home (fn+←) / End (fn+→): 맨 처음 / 맨 끝 항목
+    case home
+    case end
     case cmdDelete
     /// ⌘, : 설정 창 열기
     case cmdComma

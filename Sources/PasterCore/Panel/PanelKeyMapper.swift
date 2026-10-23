@@ -22,6 +22,11 @@ public enum PanelKeyMapper {
         public static let rightArrow: UInt16 = 124
         public static let downArrow: UInt16 = 125
         public static let upArrow: UInt16 = 126
+        /// kVK_Home · kVK_End · kVK_PageUp · kVK_PageDown (맥 키보드에서는 fn+← / → / ↑ / ↓)
+        public static let home: UInt16 = 115
+        public static let end: UInt16 = 119
+        public static let pageUp: UInt16 = 116
+        public static let pageDown: UInt16 = 121
         /// kVK_ANSI_P
         public static let p: UInt16 = 35
         /// kVK_ANSI_Comma
@@ -55,6 +60,15 @@ public enum PanelKeyMapper {
         case KeyCode.delete:
             if modifiers == .command { return .cmdDelete }
             return modifiers.isDisjoint(with: [.command, .control]) ? .textInput : nil
+        // 글자가 기능 키 영역(U+F7xx)이라 키 코드로만 판별한다. 수정 키가 있으면 예전처럼 흘려보낸다
+        case KeyCode.pageUp:
+            return modifiers.isEmpty ? .pageUp : nil
+        case KeyCode.pageDown:
+            return modifiers.isEmpty ? .pageDown : nil
+        case KeyCode.home:
+            return modifiers.isEmpty ? .home : nil
+        case KeyCode.end:
+            return modifiers.isEmpty ? .end : nil
         case KeyCode.tab:
             return nil
         default:

@@ -1,5 +1,5 @@
 /// 패널의 두 칼럼.
-public enum PanelColumn: Equatable, Sendable {
+public enum PanelColumn: Hashable, Sendable {
     case clipboard
     case pinned
 
@@ -37,6 +37,8 @@ public struct PanelState: Equatable, Sendable {
     /// 칼럼별 마지막 선택 위치
     public var clipboardIndex: Int
     public var pinnedIndex: Int
+    /// PageUp / PageDown 한 번에 움직일 행 수. 앱이 칼럼에 끝까지 보이는 행 수로 채운다 (`pageSize(visibleHeight:rowHeight:)`)
+    public var pageSize: Int
 
     public init(
         focus: PanelFocus = .search,
@@ -44,7 +46,8 @@ public struct PanelState: Equatable, Sendable {
         clipboardCount: Int = 0,
         pinnedCount: Int = 0,
         clipboardIndex: Int = 0,
-        pinnedIndex: Int = 0
+        pinnedIndex: Int = 0,
+        pageSize: Int = 1
     ) {
         self.focus = focus
         self.query = query
@@ -52,6 +55,20 @@ public struct PanelState: Equatable, Sendable {
         self.pinnedCount = pinnedCount
         self.clipboardIndex = clipboardIndex
         self.pinnedIndex = pinnedIndex
+        self.pageSize = pageSize
+    }
+
+    /// 칼럼에 끝까지 보이는 행 수. 최소 1 (행 높이를 아직 모르거나 한 행도 다 보이지 않을 때).
+    public static func pageSize(visibleHeight: Double, rowHeight: Double) -> Int {
+        guard rowHeight > 0, visibleHeight.isFinite, rowHeight.isFinite else { return 1 }
+        return max(Int((visibleHeight / rowHeight).rounded(.down)), 1)
+    }
+
+    /// 검색창에서 목록으로 들어갈 칼럼: Clipboard, 비어 있으면 Pinned, 둘 다 비면 nil.
+    var firstNonEmptyColumn: PanelColumn? {
+        if clipboardCount > 0 { return .clipboard }
+        if pinnedCount > 0 { return .pinned }
+        return nil
     }
 
     /// ⌘숫자 힌트 · 미리보기 · Enter 의 대상 칼럼. 검색창 포커스면 Clipboard.

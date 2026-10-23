@@ -26,6 +26,31 @@ struct PanelKeyMapperTests {
         #expect(key(Code.leftArrow, .shift) == nil)
     }
 
+    @Test func pageKeysMapByKeyCodeWithoutModifiers() {
+        // fn+↑/↓/←/→ 가 보내는 키. 글자는 기능 키 영역(U+F7xx)이라 키 코드로 판별한다
+        #expect(Code.pageUp == 116)
+        #expect(Code.pageDown == 121)
+        #expect(Code.home == 115)
+        #expect(Code.end == 119)
+        #expect(key(Code.pageUp, [], "\u{F72C}") == .pageUp)
+        #expect(key(Code.pageDown, [], "\u{F72D}") == .pageDown)
+        #expect(key(Code.home, [], "\u{F729}") == .home)
+        #expect(key(Code.end, [], "\u{F72B}") == .end)
+        #expect(key(Code.pageUp) == .pageUp)
+        #expect(key(Code.pageDown) == .pageDown)
+        #expect(key(Code.home) == .home)
+        #expect(key(Code.end) == .end)
+    }
+
+    @Test(arguments: [KeyModifiers.command, .option, .shift, .control, [.command, .option], [.shift, .command]])
+    func pageKeysWithModifiersAreIgnored(modifiers: KeyModifiers) {
+        // 예전처럼 패널이 관여하지 않고 흘려보낸다 (⇧PageDown 등)
+        #expect(key(Code.pageUp, modifiers, "\u{F72C}") == nil)
+        #expect(key(Code.pageDown, modifiers, "\u{F72D}") == nil)
+        #expect(key(Code.home, modifiers, "\u{F729}") == nil)
+        #expect(key(Code.end, modifiers, "\u{F72B}") == nil)
+    }
+
     @Test func commandShortcuts() {
         #expect(key(35, .command, "p") == .cmdP)
         #expect(key(Code.delete, .command) == .cmdDelete)

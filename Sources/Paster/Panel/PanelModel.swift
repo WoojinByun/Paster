@@ -37,6 +37,8 @@ final class PanelModel {
     @ObservationIgnored var effectHandler: ((PanelEffect) -> Void)?
     /// 마지막으로 목록을 읽은 검색어. 검색어가 바뀐 뒤에는 이전 선택 항목을 따라가지 않는다
     @ObservationIgnored private var loadedQuery: String?
+    /// 칼럼마다 잰 PageUp / PageDown 행 수 (`ClipColumnView` 가 보고한다)
+    @ObservationIgnored private var pageSizes: [PanelColumn: Int] = [:]
 
     init(store: ClipStore, settings: PasterSettings) {
         self.store = store
@@ -45,7 +47,8 @@ final class PanelModel {
 
     /// 패널을 열 때: 검색어 · 포커스 초기화.
     func resetForOpen() {
-        state = PanelState()
+        // pageSize 는 레이아웃이 바뀔 때만 다시 보고되므로 열 때마다 유지한다
+        state = PanelState(pageSize: state.pageSize)
         message = nil
         syncSearchField()
         reload(keepingSelection: false)
@@ -72,6 +75,14 @@ final class PanelModel {
             clipboardIndex: selectedClipboardID.flatMap { id in clipboardItems.firstIndex { $0.id == id } },
             pinnedIndex: selectedPinnedID.flatMap { id in pinnedItems.firstIndex { $0.id == id } }
         )
+    }
+
+    /// 칼럼에 끝까지 보이는 행 수를 받는다. 두 칼럼 높이는 같지만 행 높이가 조금 다를 수 있어
+    /// 작은 쪽을 써서 어느 칼럼에서도 한 화면을 넘겨 뛰지 않게 한다.
+    func setPageSize(_ size: Int, for column: PanelColumn) {
+        pageSizes[column] = size
+        let pageSize = pageSizes.values.min() ?? 1
+        if state.pageSize != pageSize { state.pageSize = pageSize }
     }
 
     func queryChanged(_ query: String) {

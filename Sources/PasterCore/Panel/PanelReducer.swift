@@ -35,12 +35,13 @@ public enum PanelReducer {
         var state = state
         switch key {
         case .down:
-            if state.clipboardCount > 0 {
-                state.focus = .clipboard
-            } else if state.pinnedCount > 0 {
-                state.focus = .pinned
-            }
+            if let column = state.firstNonEmptyColumn { state.focus = column.focus }
             return (state, nil)
+        case .pageUp, .pageDown, .home, .end:
+            // ↓ 와 같은 규칙으로 목록에 들어간 뒤 그 칼럼에서 키를 적용한다
+            guard let column = state.firstNonEmptyColumn else { return (state, nil) }
+            state.focus = column.focus
+            return reduceList(state, column, key)
         case .up, .left, .right, .cmdDelete:
             // 검색창 안의 커서 이동 · 편집
             return (state, .passThrough)
@@ -73,6 +74,18 @@ public enum PanelReducer {
             return (state, nil)
         case .down:
             if index + 1 < count { state.setIndex(index + 1, in: column) }
+            return (state, nil)
+        case .pageUp, .pageDown, .home, .end:
+            // ↑ 와 달리 맨 위에서도 검색창으로 가지 않고, 칼럼도 넘나들지 않는다
+            guard count > 0 else { return (state, nil) }
+            let page = max(state.pageSize, 1)
+            let target = switch key {
+            case .pageUp: index - page
+            case .pageDown: index + page
+            case .home: 0
+            default: count - 1
+            }
+            state.setIndex(min(max(target, 0), count - 1), in: column)
             return (state, nil)
         case .left:
             if column == .pinned, state.clipboardCount > 0 { state.focus = .clipboard }
